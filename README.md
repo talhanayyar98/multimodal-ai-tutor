@@ -12,11 +12,11 @@ cognitive-affective state with an LSTM, and adapts Gemini-generated hints to it.
 └────────────────────┘    adaptive hints     └───────────────────┘                      └───────────────────┘
 ```
 
-| Folder        | Stack                          | Port |
-| ------------- | ------------------------------ | ---- |
+| Folder        | Stack                            | Port |
+| ------------- | -------------------------------- | ---- |
 | `frontend/`   | Next.js (TypeScript, App Router) | 3000 |
-| `backend/`    | Node.js + Express (TypeScript) | 5000 |
-| `ml-service/` | Python + FastAPI + PyTorch     | 8000 |
+| `backend/`    | Node.js + Express (TypeScript)   | 5000 |
+| `ml-service/` | Python + FastAPI + PyTorch       | 8000 |
 
 ## Prerequisites
 
@@ -96,21 +96,21 @@ want the browser to call the backend directly.
 Defined in `frontend/lib/features.ts`; length is checked in
 `backend/src/routes.ts` and `ml-service/model.py`.
 
-| #  | Feature          | Description                                             |
-| -- | ---------------- | ------------------------------------------------------- |
-| 0  | `facePresence`   | fraction of frames with a detected face (0–1)           |
-| 1  | `avgEyeOpenness` | mean eyelid openness from eye-aspect-ratio (0–1)        |
-| 2  | `blinkRate`      | blinks per second (eyelid distance below threshold)     |
-| 3  | `gazeDispersion` | std of iris-based gaze (x + y) — scanning vs fixation   |
-| 4  | `gazeLeftX`      | mean left-iris position in the eye box, -1..1           |
-| 5  | `gazeLeftY`      | (uncalibrated gaze-direction estimate, per eye)         |
-| 6  | `gazeRightX`     | mean right-iris position in the eye box, -1..1          |
-| 7  | `gazeRightY`     |                                                         |
-| 8  | `headMovement`   | nose-tip travel, normalized image units                 |
-| 9  | `mouseTravel`    | cursor distance (px)                                    |
-| 10 | `mouseSpeedMean` | mean cursor speed (px/s)                                |
-| 11 | `clickCount`     | mouse-down events in the window                         |
-| 12 | `idleRatio`      | fraction of window without mouse movement (0–1)         |
+| #   | Feature          | Description                                           |
+| --- | ---------------- | ----------------------------------------------------- |
+| 0   | `facePresence`   | fraction of frames with a detected face (0–1)         |
+| 1   | `avgEyeOpenness` | mean eyelid openness from eye-aspect-ratio (0–1)      |
+| 2   | `blinkRate`      | blinks per second (eyelid distance below threshold)   |
+| 3   | `gazeDispersion` | std of iris-based gaze (x + y) — scanning vs fixation |
+| 4   | `gazeLeftX`      | mean left-iris position in the eye box, -1..1         |
+| 5   | `gazeLeftY`      | (uncalibrated gaze-direction estimate, per eye)       |
+| 6   | `gazeRightX`     | mean right-iris position in the eye box, -1..1        |
+| 7   | `gazeRightY`     |                                                       |
+| 8   | `headMovement`   | nose-tip travel, normalized image units               |
+| 9   | `mouseTravel`    | cursor distance (px)                                  |
+| 10  | `mouseSpeedMean` | mean cursor speed (px/s)                              |
+| 11  | `clickCount`     | mouse-down events in the window                       |
+| 12  | `idleRatio`      | fraction of window without mouse movement (0–1)       |
 
 Iris landmarks come from `face_landmarker.task` (478-point mesh with iris
 refinement always enabled — indices 468/473 are the right/left iris centers).
@@ -119,13 +119,13 @@ Gaze is the iris position normalized inside the eye's corner-to-corner box
 
 ## API summary
 
-| Endpoint                       | Description                                                        |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `POST /api/session` (backend)  | new session, random A/B group → `{ sessionId, abGroup }`           |
-| `POST /api/signals` (backend)  | 5 s batch in, stored + forwarded to ML → `{ ok, state }`           |
-| `GET /api/hint/:sessionId`     | ML state + Gemini hint → `{ hint, state, abGroup }` (`?problem=…`) |
-| `POST /api/chat/:sessionId`    | `{ message, history, problem }` → state-conditioned tutor reply `{ reply, state, abGroup }` |
-| `POST /infer` (ml-service)     | `{ features: number[][] }` → `{ state, probs }`                    |
+| Endpoint                      | Description                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `POST /api/session` (backend) | new session, random A/B group → `{ sessionId, abGroup }`                                    |
+| `POST /api/signals` (backend) | 5 s batch in, stored + forwarded to ML → `{ ok, state }`                                    |
+| `GET /api/hint/:sessionId`    | ML state + Gemini hint → `{ hint, state, abGroup }` (`?problem=…`)                          |
+| `POST /api/chat/:sessionId`   | `{ message, history, problem }` → state-conditioned tutor reply `{ reply, state, abGroup }` |
+| `POST /infer` (ml-service)    | `{ features: number[][] }` → `{ state, probs }`                                             |
 
 **A/B groups** — assigned randomly at session start. `adaptive`: the Gemini
 prompt includes the inferred cognitive state; `control`: the same prompt without
