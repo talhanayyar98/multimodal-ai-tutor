@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ps -o pid,ppid,lstart,command -p 91329,91331,91333)",
+      "Bash(lsof -nP -iTCP:3001 -sTCP:LISTEN)",
+      "Bash(ps -p 91329,91331,91333 -o pid,command)",
+      "Bash(curl -s -m 3 http://127.0.0.1:5000/health)",
+      "Bash(curl -s -m 3 -X POST http://127.0.0.1:5000/api/session)",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:ESTABLISHED)",
+      "Bash(awk '{print $11, $12, $13}')",
+      "Bash(/opt/homebrew/bin/python3.12 -)",
+      "Bash(curl -sf http://127.0.0.1:3001)",
+      "Bash(curl -s -m 5 -X POST http://127.0.0.1:3001/api/session)",
+      "Bash(echo \"proxy check: $\\(curl -s -m 5 -X POST http://127.0.0.1:3001/api/session\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code} %{size_download}B' http://127.0.0.1:3001/mediapipe/wasm/vision_wasm_internal.js)",
+      "Bash(echo \"wasm served: $\\(curl -s -o /dev/null -w '%{http_code} %{size_download}B' http://127.0.0.1:3001/mediapipe/wasm/vision_wasm_internal.js\\)\")",
+      "Bash(curl -sf -m 2 http://127.0.0.1:3000)",
+      "Bash(curl -sf -m 2 http://127.0.0.1:5000/health)",
+      "Bash(curl -sf -m 2 http://127.0.0.1:8000/health)",
+      "Bash(ps -o pid,lstart,command -p 28087,28088,28093)",
+      "Bash(.venv/bin/python -c \"import model; m = model.load_model\\(\\); import torch; out = m\\(torch.zeros\\(1, 4, model.FEATURE_DIM\\)\\); print\\('ml model OK — FEATURE_DIM', model.FEATURE_DIM, '→ logits', tuple\\(out.shape\\)\\)\")"
+    ]
+  }
+}
