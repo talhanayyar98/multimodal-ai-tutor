@@ -168,10 +168,10 @@ def train_lstm(
         for start in range(0, len(order), 64):
             batch = torch.from_numpy(order[start : start + 64])
             xb = X_t[batch]
-            # Sometimes show only the last 4–11 windows: in the app the first
-            # minute of a session has fewer than 12 windows.
+            # Sometimes show only the last 1–11 windows: in the app the first
+            # minute of a session has fewer than 12 (the service passes 1–12).
             if rng.random() < 0.3:
-                xb = xb[:, -int(rng.integers(4, SEQ_LEN)) :]
+                xb = xb[:, -int(rng.integers(1, SEQ_LEN)) :]
             loss = loss_fn(model(xb), y_t[batch])
             optimizer.zero_grad()
             loss.backward()

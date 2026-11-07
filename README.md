@@ -257,5 +257,24 @@ npm run train                       # real participants (P-codes): the default
   `metrics.json`, `report.md` and `dataset.npz`. The same seed gives the same
   results.
 
-> The service does not apply `scaler.json` yet, so don't point `MODEL_WEIGHTS`
-> at a trained model until inference uses the same preprocessing (next step).
+### Using a trained model in the app
+
+The ML service runs the model set by `MODEL_RUN`, a run directory from
+`train.py`. It is read from the environment or from `ml-service/.env` (see
+`ml-service/.env.example`):
+
+```bash
+# ml-service/.env
+MODEL_RUN=runs/20261107-182554-synthetic
+```
+
+- **Restart needed:** restart the service after changing it (`--reload` only watches `.py` files).
+- **Preprocessing:** `model.pt` is always loaded together with its `scaler.json` and applied with the same
+  preprocessing as in training (last 12 windows, log1p, standardization).
+- **Fails loudly:** missing files, a different feature order, states or layer shapes, or the
+  old `MODEL_WEIGHTS` setting stop the service at startup instead of producing wrong predictions.
+- **Unset:** the untrained placeholder runs (its states are meaningless).
+- **Model info:** `/health` and every `/infer` response include `model: { name, data, trained }`.
+  The main page shows it: a **DEMO** tag on the state badge for a model
+  trained on synthetic data, **UNTRAINED** for the placeholder, and a "Model:"
+  line in the "How this works" card.

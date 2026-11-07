@@ -1,13 +1,11 @@
-"""Placeholder LSTM for cognitive-state classification.
+"""LSTM for cognitive-state classification.
 
-The architecture (input/output shapes) is final; the weights are untrained.
-To swap in the real model, save its state dict with `torch.save(model.state_dict(), path)`
-and point the MODEL_WEIGHTS environment variable at that file.
+The architecture is shared by training (train.py) and the service. Trained
+weights are always loaded together with their preprocessing (predictor.py);
+untrained_model() is the stand-in used before any model is trained.
 """
 
 from __future__ import annotations
-
-import os
 
 import torch
 from torch import nn
@@ -36,15 +34,10 @@ class CognitiveStateLSTM(nn.Module):
         return self.head(out[:, -1, :])
 
 
-def load_model(weights_path: str | None = None) -> CognitiveStateLSTM:
+def untrained_model() -> CognitiveStateLSTM:
+    """Fixed random weights (seed 0): runs end to end, but its states are not meaningful."""
     torch.manual_seed(0)  # deterministic placeholder predictions across restarts
     model = CognitiveStateLSTM()
-    if weights_path:
-        if not os.path.exists(weights_path):
-            raise FileNotFoundError(f"MODEL_WEIGHTS points to a missing file: {weights_path}")
-        model.load_state_dict(torch.load(weights_path, map_location="cpu"))
-        print(f"[model] loaded trained weights from {weights_path}")
-    else:
-        print("[model] MODEL_WEIGHTS not set — using untrained placeholder weights")
+    print("[model] MODEL_RUN not set — using the untrained placeholder (its states are not meaningful)")
     model.eval()
     return model

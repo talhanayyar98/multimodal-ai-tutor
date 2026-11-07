@@ -7,7 +7,7 @@ import TutorChat from "@/components/TutorChat";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
 import { useMouseTracking } from "@/hooks/useMouseTracking";
 import { useSignalBatcher } from "@/hooks/useSignalBatcher";
-import { startSession, type SessionInfo } from "@/lib/api";
+import { startSession, type ModelInfo, type SessionInfo } from "@/lib/api";
 import { EyeAccumulator, type EyeSample } from "@/lib/eyeSignals";
 import type { Features } from "@/lib/features";
 
@@ -15,6 +15,29 @@ function stateLabel(state: string | null): string {
   if (!state) return "Analyzing signals…";
   if (state === "unknown") return "State unknown";
   return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+/** Says which model the state badge comes from, so a demo model is never mistaken for a real one. */
+function describeModel(model: ModelInfo | null, batchesSent: number) {
+  if (batchesSent === 0) return { tag: null, short: "waiting for the first signals", long: "" };
+  if (!model) {
+    return { tag: null, short: "ML service not reachable", long: "The ML service is not reachable, so no state is inferred." };
+  }
+  if (!model.trained) {
+    return {
+      tag: "untrained",
+      short: "untrained placeholder (states are not meaningful)",
+      long: "Untrained placeholder model: these states are not meaningful yet.",
+    };
+  }
+  if (model.data === "synthetic") {
+    return {
+      tag: "demo",
+      short: "demo, trained on mock data",
+      long: `Demo model trained on synthetic data (${model.name}), for testing the pipeline, not real accuracy.`,
+    };
+  }
+  return { tag: null, short: "trained on pilot data", long: `Model trained on pilot data (${model.name}).` };
 }
 
 export default function Home() {
@@ -71,7 +94,8 @@ export default function Home() {
     [mouseAcc],
   );
 
-  const { lastState, batchesSent } = useSignalBatcher(session?.sessionId ?? null, collect);
+  const { lastState, batchesSent, model } = useSignalBatcher(session?.sessionId ?? null, collect);
+  const modelNote = describeModel(model, batchesSent);
 
   return (
     <main className="page home">
@@ -91,9 +115,10 @@ export default function Home() {
           <span
             className="badge badge-state"
             data-state={lastState ?? "unknown"}
-            title="Cognitive state inferred by the LSTM from webcam + mouse signals, updated every 5 s"
+            title={`Cognitive state inferred by the LSTM from the last minute of webcam + mouse signals, updated every 5 s. ${modelNote.long}`}
           >
             <i className="dot" /> {stateLabel(lastState)}
+            {modelNote.tag && <span className="badge-tag">{modelNote.tag}</span>}
           </span>
           {session && (
             <span
@@ -159,7 +184,10 @@ export default function Home() {
                 <span>The camera image never leaves your browser</span>
               </li>
             </ul>
-            {session && <p className="how-session">Session {session.sessionId.slice(0, 8)}</p>}
+            <p className="how-session">
+              Model: {modelNote.short}
+              {session && ` · session ${session.sessionId.slice(0, 8)}`}
+            </p>
           </section>
         </aside>
       </div>
