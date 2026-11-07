@@ -182,6 +182,29 @@ pop-up never leaks into its own input.
 > API, and the free tier may not be used for EEA users. Enable billing on the
 > key first.
 
+### Synthetic pilot data (for building the training pipeline)
+
+`backend/scripts/seed-mock-pilot.ts` fills the database with generated test
+participants (T-codes, `isTest: true`, **`synthetic: true`**) in exactly the
+shape `/collect` writes, so training code can be written before real
+sessions exist. Each one runs the real session timeline with the real exercise
+bank and answer checker. A hidden learning state drives the face/mouse
+features, answers, tutor use and noisy check-ins. Routine drifts towards
+bored, puzzles towards confused, and the timed challenge towards frustrated,
+with per-person baselines.
+
+```bash
+cd backend
+npm run seed:mock                        # T-codes up to T100 (default)
+npm run seed:mock -- --until 150         # more participants
+npm run seed:mock -- --reset             # replace earlier synthetic data
+npm run seed:mock -- --reset --until 0   # delete synthetic data only
+```
+
+A model trained on this data only learns the generator's rules, so use it
+to test the pipeline, not to report results. Exclude it from real training and
+analysis with `{ synthetic: { $ne: true } }` on `participants`.
+
 ## API summary
 
 | Endpoint                      | Description                                                                                 |
@@ -210,11 +233,29 @@ The end-to-end flow works before anything real is plugged in:
 - ml-service down → state falls back to `"unknown"`, hints still generate
 - camera denied → eye features are zeros, mouse features still flow
 
-## Swapping in the trained LSTM
+## Training the model
 
-1. Train `CognitiveStateLSTM` (see `ml-service/model.py`) — keep `FEATURE_DIM`,
-   `STATES`, and the layer shapes, or update them consistently in all three
-   services.
-2. Save the weights: `torch.save(model.state_dict(), "weights.pt")`
-3. Point the service at them: `MODEL_WEIGHTS=weights.pt npm run dev` (or export
-   it before starting uvicorn).
+`ml-service/train.py` trains `CognitiveStateLSTM` on the `/collect` check-ins:
+
+```bash
+npm run train -- --data synthetic   # generated test participants: pipeline check only
+npm run train                       # real participants (P-codes): the default
+```
+
+- **Examples:** one example per check-in. The input is the 12 windows (one
+  minute × 13 features) that ended before the pop-up; the label is the state the
+  person reported. `neutral` answers are dropped.
+- **Preprocessing** (`ml-service/preprocess.py`): log1p on mouse travel, speed
+  and clicks, then standardization with the training set's mean/std.
+- **Training:** Adam with class-weighted cross-entropy. Training stops early on
+  the macro-F1 of held-out participants.
+- **Evaluation:** 5-fold cross-validation split by participant, so every score
+  comes from people the model never saw. It is compared with three baselines:
+  always guessing the most common state, guessing from the session part, and
+  logistic regression on the minute's averages.
+- **Output:** `ml-service/runs/<time>-<data>/` with `model.pt`, `scaler.json`,
+  `metrics.json`, `report.md` and `dataset.npz`. The same seed gives the same
+  results.
+
+> The service does not apply `scaler.json` yet, so don't point `MODEL_WEIGHTS`
+> at a trained model until inference uses the same preprocessing (next step).

@@ -220,8 +220,10 @@ export default function WebcamFaceMesh({
     running: faceVisible ? "Eye tracking active" : "Looking for your face…",
     paused: "Eye tracking paused — features are zeros",
     "camera-denied": "Camera denied — eye features are zeros",
-    error: `FaceMesh failed (${lastError ?? "unknown error"}) — eye features are zeros`,
+    // The raw MediaPipe error can be dozens of lines; it's in the console and the tooltip.
+    error: "Face tracking failed — eye features are zeros",
   };
+  const statusTitle = status === "error" ? (lastError ?? undefined) : undefined;
 
   return (
     <div className="webcam card" data-tracked={status === "running" && faceVisible}>
@@ -238,10 +240,16 @@ export default function WebcamFaceMesh({
             </span>
           </>
         )}
-        {status !== "running" && <div className="webcam-overlay">{statusText[status]}</div>}
+        {status !== "running" && (
+          <div className="webcam-overlay" title={statusTitle}>
+            {statusText[status]}
+          </div>
+        )}
       </div>
       <div className="webcam-bar">
-        <span data-testid="webcam-status">{statusText[status]}</span>
+        <span data-testid="webcam-status" title={statusTitle}>
+          {statusText[status]}
+        </span>
         <button
           className="btn btn-ghost btn-sm"
           data-testid="webcam-toggle"
