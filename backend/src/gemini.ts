@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import type { AbGroup } from "./store";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Override with GEMINI_MODEL in backend/.env (gemini-2.5-flash is closed to new API users).
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 
 export interface HintContext {
   state: string;
