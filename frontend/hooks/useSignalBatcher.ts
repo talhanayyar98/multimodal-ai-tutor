@@ -6,10 +6,15 @@ import { toVector, type Features } from "@/lib/features";
 
 export const BATCH_INTERVAL_MS = 5000;
 
-/** Every 5 s, collects the current window's features and POSTs them to the backend. */
+/**
+ * Every 5 s, collects the current window's features and POSTs them to the backend.
+ * `collectExtras` (optional, must be stable) adds per-window values that are
+ * logged but not part of the model's feature vector.
+ */
 export function useSignalBatcher(
   sessionId: string | null,
   collect: (windowSeconds: number) => Features,
+  collectExtras?: () => Record<string, number>,
 ) {
   const [lastState, setLastState] = useState<string | null>(null);
   const [batchesSent, setBatchesSent] = useState(0);
@@ -26,6 +31,7 @@ export function useSignalBatcher(
           windowEnd,
           features,
           vector: toVector(features),
+          extras: collectExtras?.(),
         });
         setLastState(state);
         setBatchesSent((n) => n + 1);
@@ -34,7 +40,7 @@ export function useSignalBatcher(
       }
     }, BATCH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [sessionId, collect]);
+  }, [sessionId, collect, collectExtras]);
 
   return { lastState, batchesSent };
 }

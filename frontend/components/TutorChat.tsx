@@ -9,6 +9,10 @@ const PROBLEM =
 const WELCOME =
   "Hey! I'm your tutor for this session. Read the exercise above and tell me how you'd start — or ask me anything. If you get stuck, tap ✦ Hint and I'll nudge you forward.";
 
+// Used where the exercise is shown outside the chat (the /collect pilot).
+const WELCOME_EXTERNAL_EXERCISE =
+  "I'm your tutor. Stuck or unsure about the current question? Ask me anything, or tap ✦ Hint for a nudge.";
+
 type Role = "user" | "tutor" | "hint";
 
 interface Message {
@@ -24,10 +28,19 @@ export default function TutorChat({
   sessionId,
   abGroup,
   onNewChat,
+  problem = PROBLEM,
+  showExercise = true,
+  className,
 }: {
   sessionId: string | null;
   abGroup: "adaptive" | "control" | null;
-  onNewChat: () => Promise<void>;
+  /** Omit to hide the "New chat" button (e.g. when the page owns the session). */
+  onNewChat?: () => Promise<void>;
+  /** The exercise the tutor helps with; a new problem starts a fresh conversation. */
+  problem?: string;
+  /** false when the page displays the exercise itself. */
+  showExercise?: boolean;
+  className?: string;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -35,10 +48,12 @@ export default function TutorChat({
   const [switching, setSwitching] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // A (re)connected session starts a fresh conversation.
+  const welcome = showExercise ? WELCOME : WELCOME_EXTERNAL_EXERCISE;
+
+  // A (re)connected session or a new exercise starts a fresh conversation.
   useEffect(() => {
-    if (sessionId) setMessages([{ id: nextId++, role: "tutor", text: WELCOME }]);
-  }, [sessionId]);
+    if (sessionId) setMessages([{ id: nextId++, role: "tutor", text: welcome }]);
+  }, [sessionId, problem, welcome]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -62,7 +77,7 @@ export default function TutorChat({
     push("user", text);
     setBusy(true);
     try {
-      const res = await sendChat(sessionId, text, recentHistory(), PROBLEM);
+      const res = await sendChat(sessionId, text, recentHistory(), problem);
       push("tutor", res.reply, res.state);
     } catch {
       push("tutor", "I couldn't reach the server just now — give it a second and try again.");
@@ -75,7 +90,7 @@ export default function TutorChat({
     if (!sessionId || busy) return;
     setBusy(true);
     try {
-      const res = await fetchHint(sessionId, PROBLEM);
+      const res = await fetchHint(sessionId, problem);
       push("hint", res.hint, res.state);
     } catch {
       push("tutor", "I couldn't fetch a hint just now — try again in a moment.");
@@ -85,10 +100,11 @@ export default function TutorChat({
   }
 
   function handleReset() {
-    setMessages([{ id: nextId++, role: "tutor", text: WELCOME }]);
+    setMessages([{ id: nextId++, role: "tutor", text: welcome }]);
   }
 
   async function handleNewChat() {
+    if (!onNewChat) return;
     setSwitching(true);
     try {
       await onNewChat(); // new sessionId re-seeds the conversation via the effect
@@ -100,7 +116,7 @@ export default function TutorChat({
   const ready = Boolean(sessionId);
 
   return (
-    <section className="chat card">
+    <section className={`chat card${className ? ` ${className}` : ""}`}>
       <div className="chat-head">
         <h2>
           <span className="gold">✦</span> Tutor chat
@@ -115,21 +131,25 @@ export default function TutorChat({
           >
             Reset chat
           </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            data-testid="chat-new"
-            onClick={handleNewChat}
-            disabled={busy || switching}
-            title="Start a completely new session (new A/B assignment, fresh signals)"
-          >
-            {switching ? "Starting…" : "+ New chat"}
-          </button>
+          {onNewChat && (
+            <button
+              className="btn btn-ghost btn-sm"
+              data-testid="chat-new"
+              onClick={handleNewChat}
+              disabled={busy || switching}
+              title="Start a completely new session (new A/B assignment, fresh signals)"
+            >
+              {switching ? "Starting…" : "+ New chat"}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="exercise">
-        <b>Exercise.</b> {PROBLEM}
-      </div>
+      {showExercise && (
+        <div className="exercise">
+          <b>Exercise.</b> {problem}
+        </div>
+      )}
 
       <div className="chat-messages" data-testid="chat-messages">
         {messages.map((m) => (

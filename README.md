@@ -117,39 +117,80 @@ refinement always enabled — indices 468/473 are the right/left iris centers).
 Gaze is the iris position normalized inside the eye's corner-to-corner box
 (landmarks 33/133 and 263/362), with no on-screen calibration.
 
-## Pilot mode: collecting training labels
+## Collecting training data (`/collect`)
 
-The LSTM needs ground-truth labels. Pilot sessions collect them with
-experience-sampling check-ins:
+The LSTM needs ground-truth labels. The pilot page at
+**http://localhost:3000/collect** collects them: one participant per browser
+tab, about 35 minutes including the forms.
 
-```
-http://localhost:3000/?pilot=P01            # P01 = participant id (letters, digits, - or _)
-http://localhost:3000/?pilot=P01&probe=10   # 10 s check-ins — only for testing the pop-up
-```
+1. **Consent:** what is and isn't recorded (placeholder wording; replace it
+   with your approved consent text).
+2. **Background questions:** age, gender, studies, field, probability
+   background, math confidence, English comfort, glasses/contacts, mouse vs
+   trackpad, alertness. **No name.** The participant gets a code (P001, P002, …)
+   and you keep the code ↔ person list yourself.
+3. **Camera check:** waits until the face has been tracked for 3 s, and
+   explains the check-in options.
+4. **Exercises:** a 2-question warm-up, then four 7-minute probability blocks,
+   each designed to make one state likely:
 
-- About every 90 s (±15 % jitter, timed from the previous answer), a pop-up asks
-  "which best describes how you feel about the task?" — *engaged, confused,
-  bored, frustrated* or *none of these* (stored as `neutral`).
-- Answers go to the `selfreports` collection with `participantId`,
-  `promptedAt` and `answeredAt` (client epoch ms, the same clock as the signal
-  windows' `windowStart`/`windowEnd`). A label is meant to be trained on the
-  windows that ended **before** `promptedAt`, so answering the pop-up never
-  leaks into its own input. Intervals under ~77 s make answering one check-in
-  leak into the next label's 60 s input, so the badge tooltip marks them
-  "testing only".
-- Pilot sessions are always `control` (no state-conditioned tutoring — the
-  model is still untrained) and stored with `mode: "pilot"`, so they can be
-  excluded from the A/B analysis. The live state badge is hidden so it can't
-  anchor the answers.
-- MongoDB is required: the page shows a warning if the backend has no DB
-  connection, and the header badge counts saved check-ins.
+   | Block       | Questions                                    | Designed to bring out |
+   | ----------- | -------------------------------------------- | --------------------- |
+   | `routine`   | trivially easy, repetitive, endless          | boredom               |
+   | `practice`  | moderate (dice sums, complements, …)         | engagement            |
+   | `puzzles`   | counter-intuitive (Monty Hall, base rates, …) | confusion             |
+   | `challenge` | hard multi-step, 2-min limit, 2 attempts     | frustration           |
+
+   Labels come **only** from the check-ins, never from the block. Block order
+   rotates through a balanced Latin square (participant 1, 2, 3, 4 each get a
+   different order), so a state isn't tied to early or late in the session.
+   Participants only see "Part 2 of 4". The tutor chat is available
+   throughout, in `control` mode (no state conditioning).
+5. **Check-ins:** about every 90 s (±15 %) a pop-up asks how they feel:
+   engaged / confused / bored / frustrated / none of these (`neutral`).
+6. **End survey:** how well the options fit (1–5), distractions, comments,
+   then a debrief.
+
+The exercise bank is in `frontend/lib/exercises.ts`; every answer key was
+checked by brute-force enumeration.
+
+**Researcher URL options:** `?test` marks a test run. `?probe=<s>` sets the
+check-in interval and `?block=<s>` the block length. Any of the three gives
+the participant a **T-code** (T001…) and `isTest: true`, on a separate
+counter, so test runs never shift real participants' numbering or block
+rotation. Example: `/collect?probe=10&block=20` runs the whole flow in about
+2 minutes.
+
+### What is stored (MongoDB, database `adaptive-tutor`)
+
+| Collection       | One document per…       | Contents |
+| ---------------- | ----------------------- | -------- |
+| `participants`   | participant             | code, consent time, background answers, browser/screen info, block order, status (`completed` / `ended-early`), end-survey answers, `isTest` |
+| `sessions`       | participant session     | `mode: "pilot"`, `abGroup: "control"`, `participantId` |
+| `signalbatches`  | 5-second window         | the 13 face + mouse features (`vector`, same as the live model) + `extras: { keyCount, deleteCount }` (counts only, never the keys) |
+| `selfreports`    | answered check-in       | state, `promptedAt`, `answeredAt`, and the block + exercise on screen |
+| `exerciseevents` | thing that happened     | stage start/end, question shown (text + correct answer), each attempt (answer + correct), skip, timeout, tab hidden/visible, session end |
+| `chatmessages`, `hints` | tutor message    | as in the main app |
+
+No video, images or audio are stored. The camera image never leaves the
+browser. All timestamps used for alignment (`windowStart`/`windowEnd`,
+`promptedAt`, `t`) are client epoch ms on the same clock. A label is matched
+to the windows that ended **before** its `promptedAt`, so answering the
+pop-up never leaks into its own input.
+
+> Before running real participants: the tutor chat goes through the Gemini
+> API, and the free tier may not be used for EEA users. Enable billing on the
+> key first.
 
 ## API summary
 
 | Endpoint                      | Description                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `POST /api/session` (backend) | new session, random A/B group → `{ sessionId, abGroup, mode, persisted }`; body `{ mode: "pilot", participantId }` for a pilot session |
-| `POST /api/self-report`       | `{ sessionId, state, promptedAt, answeredAt }` → stores one check-in label (503 without MongoDB) |
+| `POST /api/session` (backend) | new session, random A/B group → `{ sessionId, abGroup, mode, persisted }`; body `{ mode: "pilot", participantId }` for a pilot session (always `control`) |
+| `POST /api/participants`      | `{ consent, intake, environment, settings, isTest }` → `{ participantId, blockOrder }` |
+| `POST /api/participants/:id/finish` | `{ status, post }` → marks the participant completed / ended early |
+| `POST /api/self-report`       | `{ sessionId, state, promptedAt, answeredAt, blockId?, exerciseId? }` → one check-in label |
+| `POST /api/exercise-events`   | `{ sessionId, type, t, … }` → one exercise event (pilot endpoints return 503 without MongoDB) |
 | `POST /api/signals` (backend) | 5 s batch in, stored + forwarded to ML → `{ ok, state }`                                    |
 | `GET /api/hint/:sessionId`    | ML state + Gemini hint → `{ hint, state, abGroup }` (`?problem=…`)                          |
 | `POST /api/chat/:sessionId`   | `{ message, history, problem }` → state-conditioned tutor reply `{ reply, state, abGroup }` |
