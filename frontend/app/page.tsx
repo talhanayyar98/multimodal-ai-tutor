@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import SelfReportProbe from "@/components/SelfReportProbe";
 import TutorChat from "@/components/TutorChat";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
 import { useMouseTracking } from "@/hooks/useMouseTracking";
@@ -8,6 +9,7 @@ import { useSignalBatcher } from "@/hooks/useSignalBatcher";
 import { startSession, type SessionInfo } from "@/lib/api";
 import { EyeAccumulator, type EyeSample } from "@/lib/eyeSignals";
 import type { Features } from "@/lib/features";
+import { probeIntervalIsSafe, readPilotConfig, type PilotParse } from "@/lib/pilot";
 
 function stateLabel(state: string | null): string {
   if (!state) return "Analyzing signals…";
@@ -18,18 +20,30 @@ function stateLabel(state: string | null): string {
 export default function Home() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // undefined until the URL has been read (client-only), so the first session
+  // is never created in the wrong mode.
+  const [pilotParse, setPilotParse] = useState<PilotParse | undefined>(undefined);
+  const [reportsSaved, setReportsSaved] = useState(0);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const pilot = pilotParse?.kind === "pilot" ? pilotParse.config : null;
+
+  useEffect(() => {
+    setPilotParse(readPilotConfig(window.location.search));
+  }, []);
 
   const eyeAcc = useRef<EyeAccumulator | null>(null);
   if (!eyeAcc.current) eyeAcc.current = new EyeAccumulator();
   const mouseAcc = useMouseTracking();
 
+  const pilotId = pilot?.participantId;
   const connect = useCallback(async () => {
-    const s = await startSession();
+    const s = await startSession(pilotId ? { participantId: pilotId } : undefined);
     setSession(s);
     setError(null);
-  }, []);
+  }, [pilotId]);
 
   useEffect(() => {
+    if (pilotParse === undefined || pilotParse.kind === "invalid") return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function tryConnect() {
@@ -47,7 +61,7 @@ export default function Home() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [connect]);
+  }, [connect, pilotParse]);
 
   const handleNewChat = useCallback(async () => {
     try {
@@ -71,6 +85,17 @@ export default function Home() {
 
   const { lastState, batchesSent } = useSignalBatcher(session?.sessionId ?? null, collect);
 
+  const handleReportSaved = useCallback(() => {
+    setReportsSaved((n) => n + 1);
+    setReportError(null);
+  }, []);
+
+  // Non-null only once a pilot session is live: { session id, participant, check-in interval }.
+  const pilotSession =
+    session?.mode === "pilot" && pilot
+      ? { sessionId: session.sessionId, persisted: session.persisted, ...pilot }
+      : null;
+
   return (
     <main className="page">
       <header className="header">
@@ -79,13 +104,30 @@ export default function Home() {
           <p className="sub">MSc thesis prototype · University of Jyväskylä</p>
         </div>
         <div className="badges">
-          <span
-            className="badge badge-state"
-            data-state={lastState ?? "unknown"}
-            title="Cognitive state inferred by the LSTM from webcam + mouse signals, updated every 5 s"
-          >
-            <i className="dot" /> {stateLabel(lastState)}
-          </span>
+          {pilotSession ? (
+            // The live (untrained) state is hidden in pilot mode so it can't anchor self-reports.
+            <span
+              className="badge badge-pilot"
+              data-testid="pilot-badge"
+              title={
+                `Pilot labeling session: check-in about every ${pilotSession.probeIntervalS} s` +
+                (probeIntervalIsSafe(pilotSession.probeIntervalS)
+                  ? ""
+                  : " (too frequent for real data — testing only)")
+              }
+            >
+              Pilot · {pilotSession.participantId} · {reportsSaved} check-in
+              {reportsSaved === 1 ? "" : "s"} saved
+            </span>
+          ) : (
+            <span
+              className="badge badge-state"
+              data-state={lastState ?? "unknown"}
+              title="Cognitive state inferred by the LSTM from webcam + mouse signals, updated every 5 s"
+            >
+              <i className="dot" /> {stateLabel(lastState)}
+            </span>
+          )}
           {session && (
             <span
               className="badge badge-group"
@@ -105,7 +147,23 @@ export default function Home() {
         </div>
       </header>
 
+      {pilotParse?.kind === "invalid" && <p className="error">{pilotParse.reason}</p>}
       {error && <p className="error">{error}</p>}
+      {pilotSession && !pilotSession.persisted && (
+        <p className="error">
+          Pilot mode, but the backend has no MongoDB connection — no signals or check-ins from this
+          session are being saved.
+        </p>
+      )}
+      {pilotSession && reportError && <p className="error">{reportError}</p>}
+      {pilotSession && (
+        <SelfReportProbe
+          sessionId={pilotSession.sessionId}
+          intervalS={pilotSession.probeIntervalS}
+          onSaved={handleReportSaved}
+          onError={setReportError}
+        />
+      )}
 
       <div className="columns">
         <TutorChat

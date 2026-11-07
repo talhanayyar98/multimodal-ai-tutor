@@ -3,23 +3,93 @@ import { Router } from "express";
 import { dbReady } from "./db";
 import { generateChatReply, generateHint, type ChatTurn } from "./gemini";
 import { inferState } from "./ml";
-import { ChatMessage, Hint, Session, SignalBatch } from "./models";
+import {
+  ChatMessage,
+  Hint,
+  SELF_REPORT_STATES,
+  SelfReport,
+  Session,
+  SignalBatch,
+  type SelfReportState,
+} from "./models";
 import * as store from "./store";
 
 // Must match FEATURE_ORDER in frontend/lib/features.ts and FEATURE_DIM in ml-service/model.py.
 const FEATURE_DIM = 13;
+const PARTICIPANT_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 export const router = Router();
 
-router.post("/session", async (_req, res) => {
+router.post("/session", async (req, res) => {
+  const { mode, participantId } = req.body ?? {};
+  const pilot = mode === "pilot";
+  if (pilot && (typeof participantId !== "string" || !PARTICIPANT_ID_RE.test(participantId))) {
+    res.status(400).json({
+      error: "pilot sessions need a participantId of 1–32 letters, digits, '-' or '_'",
+    });
+    return;
+  }
+
   const session: store.SessionInfo = {
     sessionId: crypto.randomUUID(),
-    abGroup: Math.random() < 0.5 ? "adaptive" : "control",
+    // Pilot (labeling) sessions never adapt: the untrained model's state is
+    // noise, and the self-reports must describe learners under unadapted tutoring.
+    abGroup: pilot ? "control" : Math.random() < 0.5 ? "adaptive" : "control",
+    mode: pilot ? "pilot" : "study",
+    participantId: pilot ? participantId : undefined,
     createdAt: new Date(),
   };
   store.rememberSession(session);
   if (dbReady()) await Session.create(session).catch(warnDb("session"));
-  res.status(201).json({ sessionId: session.sessionId, abGroup: session.abGroup });
+  res.status(201).json({
+    sessionId: session.sessionId,
+    abGroup: session.abGroup,
+    mode: session.mode,
+    participantId: session.participantId,
+    // Pilot data is worthless unless it lands in MongoDB — the UI warns when it won't.
+    persisted: dbReady(),
+  });
+});
+
+router.post("/self-report", async (req, res) => {
+  const { sessionId, state, promptedAt, answeredAt } = req.body ?? {};
+  if (
+    typeof sessionId !== "string" ||
+    !SELF_REPORT_STATES.includes(state as SelfReportState) ||
+    !isEpochMs(promptedAt) ||
+    !isEpochMs(answeredAt) ||
+    answeredAt < promptedAt
+  ) {
+    res.status(400).json({
+      error:
+        `expected { sessionId: string, state: ${SELF_REPORT_STATES.join(" | ")}, ` +
+        "promptedAt: epoch ms, answeredAt: epoch ms >= promptedAt }",
+    });
+    return;
+  }
+  const session = await findSession(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "unknown session" });
+    return;
+  }
+  if (!dbReady()) {
+    res.status(503).json({ error: "MongoDB unavailable — self-report not stored" });
+    return;
+  }
+  try {
+    await SelfReport.create({
+      sessionId,
+      participantId: session.participantId,
+      state,
+      promptedAt,
+      answeredAt,
+    });
+  } catch (err) {
+    console.warn("[db] failed to store self-report:", (err as Error).message);
+    res.status(500).json({ error: "self-report not stored" });
+    return;
+  }
+  res.status(201).json({ ok: true });
 });
 
 router.post("/signals", async (req, res) => {
@@ -142,10 +212,17 @@ async function findSession(sessionId: string): Promise<store.SessionInfo | null>
   const session: store.SessionInfo = {
     sessionId: doc.sessionId,
     abGroup: doc.abGroup as store.AbGroup,
+    mode: (doc.mode as store.SessionMode | undefined) ?? "study",
+    participantId: doc.participantId ?? undefined,
     createdAt: doc.createdAt,
   };
   store.rememberSession(session);
   return session;
+}
+
+// Client timestamps (Date.now()); rejects garbage like 0 or seconds-based values.
+function isEpochMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 1e12 && value < 1e13;
 }
 
 function warnDb(what: string) {

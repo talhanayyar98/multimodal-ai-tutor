@@ -491,3 +491,100 @@ body {
     animation: none;
   }
 }
+
+/* ---------- pilot mode: self-report check-in ---------- */
+
+.badge-pilot {
+  color: var(--gold-bright);
+  border-color: rgba(233, 185, 73, 0.45);
+  background: var(--gold-soft);
+}
+
+.probe-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(6, 6, 12, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.probe {
+  width: min(440px, 100%);
+  padding: 1.2rem 1.2rem 1rem;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+
+.probe h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--gold-bright);
+}
+
+.probe p {
+  margin: 0.3rem 0 0.9rem;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.probe-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.probe-option {
+  --accent: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.2s;
+}
+
+.probe-option[data-state="engaged"] { --accent: var(--state-engaged); }
+.probe-option[data-state="confused"] { --accent: var(--state-confused); }
+.probe-option[data-state="bored"] { --accent: var(--state-bored); }
+.probe-option[data-state="frustrated"] { --accent: var(--state-frustrated); }
+.probe-option[data-state="neutral"] { --accent: var(--state-unknown); }
+
+.probe-option:hover:not(:disabled),
+.probe-option:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: none;
+}
+
+.probe-option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.probe-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.probe-hint {
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
+.probe .probe-foot {
+  margin: 0.8rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
