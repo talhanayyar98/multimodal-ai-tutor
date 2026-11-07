@@ -22,6 +22,9 @@ export interface SelfReport {
   /** Client epoch ms, same clock as SignalBatch.windowStart/windowEnd. */
   promptedAt: number;
   answeredAt: number;
+  /** What the learner was doing when the pop-up appeared. */
+  blockId?: string;
+  exerciseId?: string;
 }
 
 export interface SignalBatch {
@@ -30,6 +33,8 @@ export interface SignalBatch {
   windowEnd: number;
   features: Features;
   vector: number[];
+  /** Logged per window but not part of the model vector, e.g. keyboard counts. */
+  extras?: Record<string, number>;
 }
 
 export interface HintResponse {
@@ -104,3 +109,96 @@ export async function sendChat(
     }),
   );
 }
+
+// ---------- /collect pilot ----------
+
+export interface Intake {
+  age: number;
+  gender: "woman" | "man" | "non-binary" | "prefer-not";
+  studyLevel: "bachelor" | "master" | "phd" | "not-student" | "other";
+  field: string;
+  probabilityBackground: "none" | "school" | "university";
+  mathConfidence: number;
+  englishComfort: number;
+  vision: "none" | "glasses" | "contacts";
+  pointerDevice: "mouse" | "trackpad" | "other";
+  alertness: number;
+}
+
+export interface NewParticipant {
+  consent: true;
+  intake: Intake;
+  environment: Record<string, string | number>;
+  settings: { probeIntervalS: number; blockSeconds: number };
+  isTest: boolean;
+}
+
+export interface ParticipantInfo {
+  participantId: string;
+  blockOrder: string[];
+}
+
+export async function createParticipant(body: NewParticipant): Promise<ParticipantInfo> {
+  return parse(
+    await fetch(`${BACKEND_URL}/api/participants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export interface PostSurvey {
+  checkinFit?: number;
+  distractions?: string;
+  comments?: string;
+}
+
+export async function finishParticipant(
+  participantId: string,
+  status: "completed" | "ended-early",
+  post: PostSurvey,
+): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/participants/${encodeURIComponent(participantId)}/finish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, post }),
+    }),
+  );
+}
+
+export interface ExerciseEvent {
+  type:
+    | "setup-done"
+    | "stage-start"
+    | "shown"
+    | "attempt"
+    | "skip"
+    | "timeout"
+    | "stage-end"
+    | "tab-hidden"
+    | "tab-visible"
+    | "session-end";
+  blockId?: string;
+  exerciseId?: string;
+  text?: string;
+  expected?: string;
+  answer?: string;
+  correct?: boolean;
+  reason?: string;
+}
+
+export async function postExerciseEvent(
+  sessionId: string,
+  event: ExerciseEvent & { t: number },
+): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/exercise-events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, ...event }),
+    }),
+  );
+}
+

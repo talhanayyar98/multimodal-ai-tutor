@@ -3,15 +3,8 @@ import { Router } from "express";
 import { dbReady } from "./db";
 import { generateChatReply, generateHint, type ChatTurn } from "./gemini";
 import { inferState } from "./ml";
-import {
-  ChatMessage,
-  Hint,
-  SELF_REPORT_STATES,
-  SelfReport,
-  Session,
-  SignalBatch,
-  type SelfReportState,
-} from "./models";
+import { ChatMessage, Hint, Session, SignalBatch } from "./models";
+import { findSession } from "./sessionLookup";
 import * as store from "./store";
 
 // Must match FEATURE_ORDER in frontend/lib/features.ts and FEATURE_DIM in ml-service/model.py.
@@ -51,49 +44,8 @@ router.post("/session", async (req, res) => {
   });
 });
 
-router.post("/self-report", async (req, res) => {
-  const { sessionId, state, promptedAt, answeredAt } = req.body ?? {};
-  if (
-    typeof sessionId !== "string" ||
-    !SELF_REPORT_STATES.includes(state as SelfReportState) ||
-    !isEpochMs(promptedAt) ||
-    !isEpochMs(answeredAt) ||
-    answeredAt < promptedAt
-  ) {
-    res.status(400).json({
-      error:
-        `expected { sessionId: string, state: ${SELF_REPORT_STATES.join(" | ")}, ` +
-        "promptedAt: epoch ms, answeredAt: epoch ms >= promptedAt }",
-    });
-    return;
-  }
-  const session = await findSession(sessionId);
-  if (!session) {
-    res.status(404).json({ error: "unknown session" });
-    return;
-  }
-  if (!dbReady()) {
-    res.status(503).json({ error: "MongoDB unavailable — self-report not stored" });
-    return;
-  }
-  try {
-    await SelfReport.create({
-      sessionId,
-      participantId: session.participantId,
-      state,
-      promptedAt,
-      answeredAt,
-    });
-  } catch (err) {
-    console.warn("[db] failed to store self-report:", (err as Error).message);
-    res.status(500).json({ error: "self-report not stored" });
-    return;
-  }
-  res.status(201).json({ ok: true });
-});
-
 router.post("/signals", async (req, res) => {
-  const { sessionId, windowStart, windowEnd, features, vector } = req.body ?? {};
+  const { sessionId, windowStart, windowEnd, features, vector, extras } = req.body ?? {};
   if (
     typeof sessionId !== "string" ||
     !Array.isArray(vector) ||
@@ -116,9 +68,15 @@ router.post("/signals", async (req, res) => {
   }
 
   if (dbReady()) {
-    await SignalBatch.create({ sessionId, windowStart, windowEnd, features, vector, state }).catch(
-      warnDb("signal batch"),
-    );
+    await SignalBatch.create({
+      sessionId,
+      windowStart,
+      windowEnd,
+      features,
+      vector,
+      extras: numericRecord(extras),
+      state,
+    }).catch(warnDb("signal batch"));
   }
   res.json({ ok: true, state });
 });
@@ -203,28 +161,17 @@ router.post("/chat/:sessionId", async (req, res) => {
   res.json({ reply, state, abGroup: session.abGroup });
 });
 
-async function findSession(sessionId: string): Promise<store.SessionInfo | null> {
-  const cached = store.getSession(sessionId);
-  if (cached) return cached;
-  if (!dbReady()) return null;
-  const doc = await Session.findOne({ sessionId }).lean();
-  if (!doc) return null;
-  const session: store.SessionInfo = {
-    sessionId: doc.sessionId,
-    abGroup: doc.abGroup as store.AbGroup,
-    mode: (doc.mode as store.SessionMode | undefined) ?? "study",
-    participantId: doc.participantId ?? undefined,
-    createdAt: doc.createdAt,
-  };
-  store.rememberSession(session);
-  return session;
-}
-
-// Client timestamps (Date.now()); rejects garbage like 0 or seconds-based values.
-function isEpochMs(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 1e12 && value < 1e13;
-}
-
 function warnDb(what: string) {
   return (err: Error) => console.warn(`[db] failed to store ${what}:`, err.message);
+}
+
+// Extra per-window signals that are logged but not (yet) part of the model
+// vector, e.g. keyboard counts. Anything that isn't a small flat record of
+// finite numbers is dropped.
+function numericRecord(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value).filter(
+    ([k, v]) => k.length <= 32 && typeof v === "number" && Number.isFinite(v),
+  );
+  return entries.length > 0 && entries.length <= 16 ? Object.fromEntries(entries) : undefined;
 }

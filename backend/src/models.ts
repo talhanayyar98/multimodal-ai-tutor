@@ -9,6 +9,25 @@ const SESSION_MODES: SessionMode[] = ["study", "pilot"];
 export const SELF_REPORT_STATES = ["engaged", "confused", "bored", "frustrated", "neutral"] as const;
 export type SelfReportState = (typeof SELF_REPORT_STATES)[number];
 
+// Pilot (/collect) session stages. Each block is designed to make one state
+// likely — routine → bored, practice → engaged, puzzles → confused,
+// challenge → frustrated — but the labels themselves only come from self-reports.
+// Must match StageId in frontend/lib/exercises.ts.
+export const STAGE_IDS = ["warmup", "routine", "practice", "puzzles", "challenge"] as const;
+
+export const EXERCISE_EVENT_TYPES = [
+  "setup-done", // camera check passed (reason "face-ok") or skipped (reason "skipped")
+  "stage-start",
+  "shown", // an exercise appeared: text + expected answer (generated items differ per person)
+  "attempt", // an answer was checked: answer + correct
+  "skip",
+  "timeout", // per-question time limit ran out (challenge block)
+  "stage-end", // reason "time" (block time up) or "items" (ran out of questions)
+  "tab-hidden",
+  "tab-visible",
+  "session-end", // reason "completed" or "ended-early"
+] as const;
+
 const SessionSchema = new Schema({
   sessionId: { type: String, required: true, unique: true },
   abGroup: { type: String, enum: AB_GROUPS, required: true },
@@ -23,6 +42,8 @@ const SignalBatchSchema = new Schema({
   windowEnd: Number,
   features: Schema.Types.Mixed,
   vector: { type: [Number], required: true },
+  // Logged per window but not part of the model vector (yet): keyCount, deleteCount.
+  extras: Schema.Types.Mixed,
   state: String,
   receivedAt: { type: Date, default: Date.now },
 });
@@ -53,7 +74,60 @@ const SelfReportSchema = new Schema({
   state: { type: String, enum: SELF_REPORT_STATES, required: true },
   promptedAt: { type: Number, required: true },
   answeredAt: { type: Number, required: true },
+  // What the learner was doing when the pop-up appeared.
+  blockId: String,
+  exerciseId: String,
   receivedAt: { type: Date, default: Date.now },
+});
+
+// A pilot participant. Deliberately no name: the researcher keeps the
+// code ↔ person mapping (e.g. on the signed consent forms), so this dataset is
+// pseudonymous.
+const ParticipantSchema = new Schema({
+  participantId: { type: String, required: true, unique: true }, // P001… (T001… for test runs)
+  seq: { type: Number, required: true },
+  isTest: { type: Boolean, default: false },
+  status: { type: String, enum: ["started", "completed", "ended-early"], default: "started" },
+  consentAt: { type: Date, required: true },
+  intake: {
+    age: Number,
+    gender: String,
+    studyLevel: String,
+    field: String,
+    probabilityBackground: String,
+    mathConfidence: Number, // 1–5
+    englishComfort: Number, // 1–5
+    vision: String, // glasses / contacts change the eye features
+    pointerDevice: String, // mouse vs trackpad changes the mouse features
+    alertness: Number, // 1–5, at the start
+  },
+  environment: Schema.Types.Mixed, // browser, screen and window size, timezone
+  settings: { probeIntervalS: Number, blockSeconds: Number },
+  blockOrder: [String],
+  post: { checkinFit: Number, distractions: String, comments: String },
+  createdAt: { type: Date, default: Date.now },
+  finishedAt: Date,
+});
+
+const ExerciseEventSchema = new Schema({
+  sessionId: { type: String, required: true, index: true },
+  participantId: { type: String, index: true },
+  type: { type: String, enum: EXERCISE_EVENT_TYPES, required: true },
+  blockId: String,
+  exerciseId: String,
+  text: String,
+  expected: String,
+  answer: String,
+  correct: Boolean,
+  reason: String,
+  t: { type: Number, required: true }, // client epoch ms, same clock as the signal windows
+  receivedAt: { type: Date, default: Date.now },
+});
+
+// Atomic sequence numbers for participant codes ("participant", "test-participant").
+const CounterSchema = new Schema({
+  _id: { type: String, required: true },
+  seq: { type: Number, default: 0 },
 });
 
 export const Session = model("Session", SessionSchema);
@@ -61,3 +135,6 @@ export const SignalBatch = model("SignalBatch", SignalBatchSchema);
 export const Hint = model("Hint", HintSchema);
 export const ChatMessage = model("ChatMessage", ChatMessageSchema);
 export const SelfReport = model("SelfReport", SelfReportSchema);
+export const Participant = model("Participant", ParticipantSchema);
+export const ExerciseEvent = model("ExerciseEvent", ExerciseEventSchema);
+export const Counter = model("Counter", CounterSchema);

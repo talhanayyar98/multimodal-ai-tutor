@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { postSelfReport, type SelfReportState } from "@/lib/api";
-import { PROBE_JITTER_FRACTION } from "@/lib/pilot";
 
-const OPTIONS: { state: SelfReportState; label: string; hint: string }[] = [
+export const DEFAULT_PROBE_INTERVAL_S = 90;
+/** Each check-in's delay is the interval ± this fraction, so it can't be anticipated. */
+const PROBE_JITTER_FRACTION = 0.15;
+
+export const CHECKIN_OPTIONS: { state: SelfReportState; label: string; hint: string }[] = [
   { state: "engaged", label: "Engaged", hint: "Focused and working on it" },
   { state: "confused", label: "Confused", hint: "Unsure what to do or what something means" },
   { state: "bored", label: "Bored", hint: "Not interested, my mind is wandering" },
@@ -23,15 +26,19 @@ const ARM_DELAY_MS = 700;
 export default function SelfReportProbe({
   sessionId,
   intervalS,
+  getContext,
   onSaved,
   onError,
 }: {
   sessionId: string;
   intervalS: number;
+  /** Read when the pop-up opens: what the learner was working on. */
+  getContext?: () => { blockId?: string; exerciseId?: string };
   onSaved: () => void;
   onError: (message: string) => void;
 }) {
   const [promptedAt, setPromptedAt] = useState<number | null>(null);
+  const contextRef = useRef<{ blockId?: string; exerciseId?: string }>({});
   const [armed, setArmed] = useState(false);
   const [cycle, setCycle] = useState(0); // bumped after each answer to schedule the next check-in
   const answeredRef = useRef<number | null>(null);
@@ -41,8 +48,12 @@ export default function SelfReportProbe({
   useEffect(() => {
     setPromptedAt(null);
     const jitter = (Math.random() * 2 - 1) * PROBE_JITTER_FRACTION;
-    const timer = setTimeout(() => setPromptedAt(Date.now()), intervalS * (1 + jitter) * 1000);
+    const timer = setTimeout(() => {
+      contextRef.current = getContext?.() ?? {};
+      setPromptedAt(Date.now());
+    }, intervalS * (1 + jitter) * 1000);
     return () => clearTimeout(timer);
+    // getContext is read lazily; a new function identity must not reschedule the check-in.
   }, [sessionId, intervalS, cycle]);
 
   // On open: pull focus out of the chat box (so in-flight typing can't land
@@ -58,7 +69,7 @@ export default function SelfReportProbe({
   function answer(state: SelfReportState) {
     if (promptedAt === null || !armed || answeredRef.current === promptedAt) return;
     answeredRef.current = promptedAt;
-    const report = { sessionId, state, promptedAt, answeredAt: Date.now() };
+    const report = { sessionId, state, promptedAt, answeredAt: Date.now(), ...contextRef.current };
     setCycle((c) => c + 1); // close right away; saving happens in the background
     postSelfReport(report).then(onSaved, (err: Error) =>
       onError(`Check-in was not saved (${err.message}). Is MongoDB running?`),
@@ -82,7 +93,7 @@ export default function SelfReportProbe({
         <h2 id="probe-title">Quick check-in</h2>
         <p id="probe-question">Right now, which best describes how you feel about the task?</p>
         <div className="probe-options">
-          {OPTIONS.map((o) => (
+          {CHECKIN_OPTIONS.map((o) => (
             <button
               key={o.state}
               className="probe-option"
