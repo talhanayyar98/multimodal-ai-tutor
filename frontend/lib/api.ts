@@ -7,6 +7,21 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 export interface SessionInfo {
   sessionId: string;
   abGroup: "adaptive" | "control";
+  mode: "study" | "pilot";
+  participantId?: string;
+  /** false when the backend has no MongoDB — nothing from the session is saved. */
+  persisted: boolean;
+}
+
+/** The four model states plus "neutral" — must match SELF_REPORT_STATES in backend/src/models.ts. */
+export type SelfReportState = "engaged" | "confused" | "bored" | "frustrated" | "neutral";
+
+export interface SelfReport {
+  sessionId: string;
+  state: SelfReportState;
+  /** Client epoch ms, same clock as SignalBatch.windowStart/windowEnd. */
+  promptedAt: number;
+  answeredAt: number;
 }
 
 export interface SignalBatch {
@@ -28,8 +43,24 @@ async function parse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function startSession(): Promise<SessionInfo> {
-  return parse(await fetch(`${BACKEND_URL}/api/session`, { method: "POST" }));
+export async function startSession(pilot?: { participantId: string }): Promise<SessionInfo> {
+  return parse(
+    await fetch(`${BACKEND_URL}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pilot ? { mode: "pilot", participantId: pilot.participantId } : {}),
+    }),
+  );
+}
+
+export async function postSelfReport(report: SelfReport): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/self-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(report),
+    }),
+  );
 }
 
 export async function postSignals(batch: SignalBatch): Promise<{ ok: boolean; state: string }> {
