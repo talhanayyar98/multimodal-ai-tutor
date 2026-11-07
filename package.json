@@ -6,11 +6,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "predev": "node -e \"const major = +process.versions.node.split('.')[0]; if (major < 20) { console.error('Node >= 20 required (found ' + process.version + ') — run: nvm use'); process.exit(1); }\"",
+    "predev": "node -e \"const major = +process.versions.node.split('.')[0]; if (major < 20) { console.error('Node >= 20 required (found ' + process.version + ') \u2014 run: nvm use'); process.exit(1); }\"",
     "dev": "concurrently -k -n frontend,backend,ml -c cyan,green,magenta \"npm run dev --prefix frontend\" \"npm run dev --prefix backend\" \"npm run dev:ml\"",
     "dev:ml": "cd ml-service && .venv/bin/uvicorn main:app --reload --port 8000",
     "install:all": "npm install --prefix frontend && npm install --prefix backend && npm run install:ml",
-    "install:ml": "cd ml-service && (command -v python3.12 >/dev/null 2>&1 && python3.12 -m venv .venv || python3 -m venv .venv) && .venv/bin/pip install -r requirements.txt"
+    "install:ml": "cd ml-service && (command -v python3.12 >/dev/null 2>&1 && python3.12 -m venv .venv || python3 -m venv .venv) && .venv/bin/pip install -r requirements.txt",
+    "train": "cd ml-service && .venv/bin/python train.py"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
