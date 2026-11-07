@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import AiSparkle from "@/components/AiSparkle";
+import { CameraIcon, MouseIcon, PulseIcon, ShieldIcon } from "@/components/collect/icons";
 import TutorChat from "@/components/TutorChat";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
 import { useMouseTracking } from "@/hooks/useMouseTracking";
@@ -72,11 +74,18 @@ export default function Home() {
   const { lastState, batchesSent } = useSignalBatcher(session?.sessionId ?? null, collect);
 
   return (
-    <main className="page">
+    <main className="page home">
       <header className="header">
         <div className="brand">
-          <h1>Multimodal Adaptive AI Tutor</h1>
-          <p className="sub">MSc thesis prototype · University of Jyväskylä</p>
+          <span className="brand-mark" aria-hidden="true">
+            <AiSparkle size={22} />
+          </span>
+          <div>
+            <h1>
+              Multimodal Adaptive <span className="ai-text">AI Tutor</span>
+            </h1>
+            <p className="sub">MSc thesis prototype · University of Jyväskylä</p>
+          </div>
         </div>
         <div className="badges">
           <span
@@ -96,11 +105,12 @@ export default function Home() {
                   : "A/B condition: tutor responses ignore cognitive state (control)"
               }
             >
-              {session.abGroup === "adaptive" ? "✦ Adaptive tutoring" : "Standard tutoring"}
+              {session.abGroup === "adaptive" && <AiSparkle size={12} />}
+              {session.abGroup === "adaptive" ? "Adaptive tutoring" : "Standard tutoring"}
             </span>
           )}
           <span className="badge" title="5-second multimodal signal windows sent to the backend">
-            ⟲ {batchesSent} windows sent
+            <b className="badge-count">{batchesSent}</b> windows sent
           </span>
         </div>
       </header>
@@ -115,10 +125,42 @@ export default function Home() {
         />
         <aside className="sidebar">
           <WebcamFaceMesh onSample={handleEyeSample} />
-          <p className="note">
-            Webcam (FaceMesh) and mouse signals are batched every 5 s and classified into a
-            cognitive state{session ? ` · session ${session.sessionId.slice(0, 8)}` : ""}.
-          </p>
+          <section className="card how-card" aria-labelledby="how-title">
+            <h2 id="how-title">How this works</h2>
+            <ul>
+              <li>
+                <span className="how-icon">
+                  <CameraIcon size={15} />
+                </span>
+                <span>
+                  <b>Face &amp; eyes</b> — openness, blinks, gaze and head movement
+                </span>
+              </li>
+              <li>
+                <span className="how-icon">
+                  <MouseIcon size={15} />
+                </span>
+                <span>
+                  <b>Mouse</b> — movement, speed, clicks and pauses
+                </span>
+              </li>
+              <li>
+                <span className="how-icon">
+                  <PulseIcon size={15} />
+                </span>
+                <span>
+                  <b>Every 5 s</b> these numbers are sent to estimate your learning state
+                </span>
+              </li>
+              <li>
+                <span className="how-icon">
+                  <ShieldIcon size={15} />
+                </span>
+                <span>The camera image never leaves your browser</span>
+              </li>
+            </ul>
+            {session && <p className="how-session">Session {session.sessionId.slice(0, 8)}</p>}
+          </section>
         </aside>
       </div>
     </main>

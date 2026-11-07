@@ -19,7 +19,7 @@ export const pilotRouter = Router();
 // Balanced Latin square (Williams design): each block appears once in every
 // position and follows every other block exactly once across 4 participants,
 // so a state is never tied to "early" or "late" in the session.
-const BLOCK_ORDERS = [
+export const BLOCK_ORDERS = [
   ["routine", "practice", "challenge", "puzzles"],
   ["practice", "puzzles", "routine", "challenge"],
   ["puzzles", "challenge", "practice", "routine"],

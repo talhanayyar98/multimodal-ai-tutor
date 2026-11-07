@@ -182,6 +182,29 @@ pop-up never leaks into its own input.
 > API, and the free tier may not be used for EEA users. Enable billing on the
 > key first.
 
+### Synthetic pilot data (for building the training pipeline)
+
+`backend/scripts/seed-mock-pilot.ts` fills the database with generated test
+participants (T-codes, `isTest: true`, **`synthetic: true`**) in exactly the
+shape `/collect` writes, so training code can be written before real
+sessions exist. Each one runs the real session timeline with the real exercise
+bank and answer checker. A hidden learning state drives the face/mouse
+features, answers, tutor use and noisy check-ins. Routine drifts towards
+bored, puzzles towards confused, and the timed challenge towards frustrated,
+with per-person baselines.
+
+```bash
+cd backend
+npm run seed:mock                        # T-codes up to T100 (default)
+npm run seed:mock -- --until 150         # more participants
+npm run seed:mock -- --reset             # replace earlier synthetic data
+npm run seed:mock -- --reset --until 0   # delete synthetic data only
+```
+
+A model trained on this data only learns the generator's rules, so use it
+to test the pipeline, not to report results. Exclude it from real training and
+analysis with `{ synthetic: { $ne: true } }` on `participants`.
+
 ## API summary
 
 | Endpoint                      | Description                                                                                 |

@@ -19,6 +19,21 @@
   --state-frustrated: #ff5d8f;
   --state-unknown: #8b8aa3;
   --radius: 14px;
+  /* AI accent: blue → violet → rose, used for hints and "AI is working" states. */
+  --ai-1: #4f86f7;
+  --ai-2: #8b67f0;
+  --ai-3: #e2659b;
+  --ai-gradient: linear-gradient(100deg, var(--ai-1), var(--ai-2) 55%, var(--ai-3));
+  --hint-bg: var(--surface-2);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Animatable start angle for the rotating conic-gradient borders. Browsers
+   without @property simply show a static gradient. */
+@property --ai-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 * {
@@ -178,8 +193,18 @@ body {
   font-size: 0.9rem;
 }
 
-.exercise b {
+.exercise-label {
+  display: inline-block;
+  margin-bottom: 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--gold);
+}
+
+.exercise-problem {
+  margin: 0;
 }
 
 .chat-messages {
@@ -188,7 +213,10 @@ body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.75rem;
+  /* Own stacking context, so the hint glow (z-index: -1) paints above the
+     card background but below the bubbles. */
+  isolation: isolate;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -200,75 +228,210 @@ body {
   border-radius: 8px;
 }
 
+/* One message: avatar (tutor / hint) + bubble. */
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.55rem;
+  max-width: 84%;
+  align-self: flex-start;
+  animation: msg-in 0.4s var(--ease-out) both;
+}
+
+.msg-row[data-role="user"] {
+  align-self: flex-end;
+}
+
+.msg-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* A new hint's sparkle spins in; while the tutor works, it keeps turning. */
+.msg-row[data-role="hint"] .msg-avatar svg {
+  animation: sparkle-arrive 0.9s var(--ease-out) both;
+}
+
+.msg-avatar[data-thinking="true"] svg {
+  animation: sparkle-think 1.6s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
 .msg {
-  max-width: 78%;
-  padding: 0.6rem 0.9rem;
-  border-radius: 14px;
+  position: relative;
+  min-width: 0;
+  padding: 0.65rem 0.95rem;
+  border-radius: 16px;
   font-size: 0.92rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
 
 .msg[data-role="user"] {
-  align-self: flex-end;
   background: linear-gradient(135deg, var(--gold-bright), #d9a636);
   color: #201700;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 5px;
   box-shadow: 0 2px 16px rgba(233, 185, 73, 0.22);
 }
 
 .msg[data-role="tutor"] {
-  align-self: flex-start;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 5px;
 }
 
+/* Hint: gradient border that sweeps around once on arrival, then settles,
+   with a soft glow behind it (the ::after sits under the bubble). */
 .msg[data-role="hint"] {
-  align-self: flex-start;
-  background: rgba(53, 230, 197, 0.07);
-  border: 1px solid rgba(53, 230, 197, 0.4);
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 0 18px rgba(53, 230, 197, 0.12);
+  border: 1.5px solid transparent;
+  border-bottom-left-radius: 5px;
+  background:
+    linear-gradient(var(--hint-bg), var(--hint-bg)) padding-box,
+    conic-gradient(
+        from var(--ai-angle),
+        var(--ai-1),
+        var(--ai-2),
+        var(--ai-3),
+        var(--ai-2),
+        var(--ai-1)
+      )
+      border-box;
+  animation: ai-spin 1.8s linear 2;
+}
+
+.msg[data-role="hint"]::after,
+.msg-thinking[data-kind="hint"]::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--ai-angle),
+    var(--ai-1),
+    var(--ai-2),
+    var(--ai-3),
+    var(--ai-2),
+    var(--ai-1)
+  );
+  filter: blur(14px);
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+.msg[data-role="hint"]::after {
+  animation:
+    ai-spin 1.8s linear 2,
+    hint-glow 3.6s ease-out both;
 }
 
 .msg-tag {
-  display: block;
-  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  margin-bottom: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--neon);
-  margin-bottom: 0.25rem;
+  background: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .msg-meta {
   display: block;
-  margin-top: 0.35rem;
+  width: fit-content;
+  margin-top: 0.45rem;
   font-size: 0.68rem;
   color: var(--text-faint);
 }
 
-.typing {
-  align-self: flex-start;
-  display: inline-flex;
-  gap: 5px;
-  padding: 0.85rem 0.95rem;
+/* Word-by-word reveal of tutor replies and hints. */
+.msg .word {
+  animation: word-in 0.5s ease-out both;
+}
+
+/* "Thinking" placeholder while a reply or hint is on its way. */
+.msg-thinking {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: min(340px, 62vw);
+  padding: 0.75rem 0.95rem 0.85rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 5px;
 }
 
-.typing span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--neon);
-  animation: blink 1.2s infinite;
+.msg-thinking[data-kind="hint"] {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--hint-bg), var(--hint-bg)) padding-box,
+    conic-gradient(
+        from var(--ai-angle),
+        var(--ai-1),
+        var(--ai-2),
+        var(--ai-3),
+        var(--ai-2),
+        var(--ai-1)
+      )
+      border-box;
+  animation: ai-spin 1.4s linear infinite;
 }
 
-.typing span:nth-child(2) { animation-delay: 0.18s; }
-.typing span:nth-child(3) { animation-delay: 0.36s; }
+.msg-thinking[data-kind="hint"]::after {
+  opacity: 0.4;
+  animation: ai-spin 1.4s linear infinite;
+}
+
+.thinking-label {
+  width: fit-content;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: linear-gradient(
+    90deg,
+    var(--text-faint) 0%,
+    var(--text-faint) 35%,
+    var(--ai-1) 45%,
+    var(--ai-2) 52%,
+    var(--ai-3) 58%,
+    var(--text-faint) 68%,
+    var(--text-faint) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2s linear infinite;
+}
+
+.shimmer-line {
+  display: block;
+  height: 9px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ai-1) 14%, transparent),
+    color-mix(in srgb, var(--ai-2) 38%, transparent),
+    color-mix(in srgb, var(--ai-3) 20%, transparent),
+    color-mix(in srgb, var(--ai-1) 14%, transparent)
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+.shimmer-line:nth-of-type(2) { width: 92%; animation-delay: -0.2s; }
+.shimmer-line:nth-of-type(3) { width: 74%; animation-delay: -0.4s; }
+.shimmer-line:nth-of-type(4) { width: 48%; animation-delay: -0.6s; }
 
 .composer {
   display: flex;
@@ -299,6 +462,107 @@ body {
   outline: none;
   border-color: var(--neon);
   box-shadow: 0 0 0 3px var(--neon-soft);
+}
+
+/* Layout-neutral wrappers in the default (dark) theme; the light theme turns
+   composer-box into one rounded input with a gradient focus ring. */
+.composer-box,
+.composer-actions {
+  display: contents;
+}
+
+.chat-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-head-mark {
+  display: grid;
+  place-items: center;
+}
+
+/* "AI" button: gradient border; it rotates on hover and while loading. */
+.btn-ai {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    conic-gradient(
+        from var(--ai-angle),
+        var(--ai-1),
+        var(--ai-2),
+        var(--ai-3),
+        var(--ai-2),
+        var(--ai-1)
+      )
+      border-box;
+  color: var(--text);
+  font-weight: 600;
+  transition: transform 0.15s, box-shadow 0.25s;
+}
+
+.btn-ai:hover:not(:disabled),
+.btn-ai:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ai-2) 14%, transparent),
+    0 6px 20px -6px color-mix(in srgb, var(--ai-2) 60%, transparent);
+  animation: ai-spin 2.4s linear infinite;
+}
+
+.btn-ai[data-loading="true"] {
+  animation: ai-spin 1.2s linear infinite;
+}
+
+.btn-ai[data-loading="true"]:disabled {
+  opacity: 1;
+}
+
+.btn-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+@keyframes ai-spin {
+  to { --ai-angle: 360deg; }
+}
+
+@keyframes hint-glow {
+  0% { opacity: 0; }
+  18% { opacity: 0.75; }
+  100% { opacity: 0.18; }
+}
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes word-in {
+  from { opacity: 0; filter: blur(3px); }
+  to { opacity: 1; filter: none; }
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@keyframes sparkle-arrive {
+  from { transform: rotate(-120deg) scale(0.4); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@keyframes sparkle-think {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(180deg) scale(0.78); }
+  100% { transform: rotate(360deg) scale(1); }
 }
 
 /* ---------- buttons ---------- */
@@ -487,16 +751,23 @@ body {
   50% { opacity: 0.35; }
 }
 
-@keyframes blink {
-  0%, 80%, 100% { opacity: 0.25; }
-  40% { opacity: 1; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .badge .dot,
   .webcam-live .dot,
-  .typing span {
-    animation: none;
+  .msg-row,
+  .msg,
+  .msg::after,
+  .msg .word,
+  .msg-avatar svg,
+  .thinking-label,
+  .shimmer-line,
+  .btn-ai,
+  .composer-box {
+    animation: none !important;
+  }
+
+  .msg[data-role="hint"]::after {
+    opacity: 0.18;
   }
 }
 
@@ -1963,4 +2234,450 @@ textarea.text-input {
 
 .end-session {
   align-self: flex-start;
+}
+
+/* ==========================================================================
+   Main page (/): light theme
+   Scoped to .page.home: the tokens below re-skin every component inside it.
+   The /collect flow keeps the dark theme above.
+   ========================================================================== */
+
+.page.home {
+  --bg: #f5f6fb;
+  --surface: #ffffff;
+  --surface-2: #f4f5fa;
+  --border: #e3e6ef;
+  --border-soft: #eceef5;
+  --text: #1c2033;
+  --text-dim: #4f566b;
+  --text-faint: #858ba0;
+  --danger: #d4405a;
+  --state-engaged: #12925a;
+  --state-confused: #c4750a;
+  --state-bored: #4a62dd;
+  --state-frustrated: #d0367a;
+  --state-unknown: #7a8098;
+  --hint-bg: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(28, 32, 51, 0.05), 0 2px 6px rgba(28, 32, 51, 0.04);
+  --shadow-md: 0 1px 3px rgba(28, 32, 51, 0.05), 0 12px 32px -12px rgba(46, 58, 120, 0.18);
+  color-scheme: light;
+  color: var(--text);
+  gap: 1.25rem;
+}
+
+body:has(.page.home) {
+  color-scheme: light;
+  color: #1c2033;
+  background-color: #f5f6fb;
+  background-image:
+    radial-gradient(900px 520px at 88% -10%, rgba(139, 103, 240, 0.13), transparent 62%),
+    radial-gradient(760px 480px at -6% 6%, rgba(79, 134, 247, 0.12), transparent 60%),
+    radial-gradient(820px 520px at 50% 118%, rgba(226, 101, 155, 0.09), transparent 62%);
+}
+
+.home ::selection {
+  background: color-mix(in srgb, var(--ai-2) 22%, transparent);
+}
+
+/* ---------- header ---------- */
+
+.home .header {
+  align-items: center;
+}
+
+.home .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.home .brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.home .brand h1 {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  background: none;
+  color: var(--text);
+}
+
+.ai-text {
+  background: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.home .brand .sub {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.home .badge {
+  padding: 0.4rem 0.85rem;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  box-shadow: var(--shadow-sm);
+}
+
+.home .badge .dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.home .badge-state[data-state] {
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  background: color-mix(in srgb, currentColor 7%, #ffffff);
+  font-weight: 600;
+}
+
+/* Needed: `.home .badge` (same specificity as the base state rules) resets the color. */
+.home .badge-state[data-state="engaged"] { color: var(--state-engaged); }
+.home .badge-state[data-state="confused"] { color: var(--state-confused); }
+.home .badge-state[data-state="bored"] { color: var(--state-bored); }
+.home .badge-state[data-state="frustrated"] { color: var(--state-frustrated); }
+.home .badge-state[data-state="unknown"] { color: var(--state-unknown); }
+
+.home .badge-group[data-group="adaptive"] {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    var(--ai-gradient) border-box;
+  color: var(--ai-2);
+  font-weight: 600;
+}
+
+.badge-count {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- cards + buttons ---------- */
+
+.home .card {
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.home .btn-ghost {
+  background: var(--surface);
+}
+
+.home .btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: #cfd3e1;
+}
+
+.home .btn-send {
+  border-radius: 999px;
+  padding-inline: 1.05rem;
+  background: linear-gradient(135deg, var(--ai-1), var(--ai-2));
+  color: #ffffff;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--ai-2) 65%, transparent);
+}
+
+.home .btn-send:disabled {
+  opacity: 1;
+  background: #e7e9f1;
+  color: #a2a7b9;
+  box-shadow: none;
+}
+
+.home .btn-ai {
+  border-radius: 999px;
+  padding-inline: 1rem;
+}
+
+/* ---------- chat ---------- */
+
+.home .chat {
+  height: calc(100vh - 160px);
+  border-radius: 20px;
+}
+
+.home .chat-head {
+  padding: 0.85rem 1.1rem;
+}
+
+.home .chat-head h2 {
+  font-size: 0.98rem;
+  letter-spacing: 0;
+}
+
+.home .chat-head-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ai-2) 9%, #ffffff);
+}
+
+.home .exercise {
+  margin: 1rem 1.1rem 0;
+  padding: 0.85rem 1rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--ai-1) 20%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ai-1) 7%, #ffffff),
+    color-mix(in srgb, var(--ai-2) 6%, #ffffff)
+  );
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.home .exercise-label {
+  color: var(--ai-1);
+}
+
+.home .chat-messages {
+  padding: 1.1rem;
+  gap: 0.85rem;
+}
+
+.home .chat-messages::-webkit-scrollbar-thumb {
+  background: #d9dce8;
+}
+
+.home .msg {
+  border-radius: 18px;
+}
+
+.home .msg[data-role="user"] {
+  background: linear-gradient(135deg, #e8efff, #f0e9ff);
+  border: 1px solid #dde3fa;
+  color: var(--text);
+  border-bottom-right-radius: 6px;
+  box-shadow: none;
+}
+
+.home .msg[data-role="tutor"] {
+  background: var(--surface);
+  border-color: var(--border);
+  border-bottom-left-radius: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.home .msg[data-role="hint"],
+.home .msg-thinking {
+  border-bottom-left-radius: 6px;
+}
+
+.home .msg-thinking[data-kind="chat"] {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.home .msg-avatar {
+  width: 30px;
+  height: 30px;
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.home .msg-meta {
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+/* One rounded input, Gemini-style: a gradient ring sweeps in on focus. */
+.home .composer {
+  padding: 0.7rem 1rem 1rem;
+  border-top: 0;
+  background: transparent;
+}
+
+.home .composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.4rem 0.4rem 1rem;
+  border: 1.5px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface-2);
+  transition: box-shadow 0.25s, background 0.25s;
+}
+
+.home .composer-box:focus-within {
+  border-color: transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    conic-gradient(
+        from var(--ai-angle),
+        var(--ai-1),
+        var(--ai-2),
+        var(--ai-3),
+        var(--ai-2),
+        var(--ai-1)
+      )
+      border-box;
+  box-shadow: 0 8px 26px -10px color-mix(in srgb, var(--ai-2) 45%, transparent);
+  animation: ai-spin 1.1s var(--ease-out) 1;
+}
+
+.home .composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.home .composer textarea {
+  align-self: center;
+  min-height: 40px;
+  padding: 0.55rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.home .composer textarea:focus {
+  box-shadow: none;
+}
+
+/* ---------- sidebar ---------- */
+
+.home .webcam {
+  padding: 0.8rem;
+  border-radius: 20px;
+}
+
+.home .webcam-frame {
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: #11131f;
+}
+
+.home .webcam[data-tracked="true"] .webcam-frame {
+  border-color: transparent;
+  background:
+    linear-gradient(#11131f, #11131f) padding-box,
+    var(--ai-gradient) border-box;
+  box-shadow: 0 10px 28px -12px color-mix(in srgb, var(--ai-2) 60%, transparent);
+}
+
+.home .webcam-overlay {
+  background: linear-gradient(160deg, #eef2fc, #f3eefc);
+  color: var(--text-dim);
+}
+
+.home .webcam-face[data-on="true"] {
+  color: #8ff0d9;
+}
+
+.home .webcam-bar {
+  color: var(--text-dim);
+}
+
+.how-card {
+  padding: 1rem 1.1rem 0.9rem;
+  border-radius: 20px;
+}
+
+.how-card h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.how-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.how-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.how-card li b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.how-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ai-1) 9%, #ffffff);
+  color: var(--ai-1);
+}
+
+.how-card li:nth-child(2) .how-icon {
+  background: color-mix(in srgb, var(--ai-2) 10%, #ffffff);
+  color: var(--ai-2);
+}
+
+.how-card li:nth-child(3) .how-icon {
+  background: color-mix(in srgb, var(--ai-3) 10%, #ffffff);
+  color: var(--ai-3);
+}
+
+.how-card li:nth-child(4) .how-icon {
+  background: color-mix(in srgb, var(--state-engaged) 10%, #ffffff);
+  color: var(--state-engaged);
+}
+
+.how-session {
+  margin: 0.8rem 0 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-soft);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.home .error {
+  background: #fff1f3;
+  border-color: #f6c3cd;
+}
+
+@media (max-width: 880px) {
+  .home .chat {
+    height: 72vh;
+  }
+}
+
+@media (max-width: 560px) {
+  .page.home {
+    padding: 1rem 1rem 1.5rem;
+  }
+
+  .home .composer-box {
+    flex-wrap: wrap;
+    padding: 0.4rem 0.5rem 0.5rem 0.9rem;
+  }
+
+  .home .composer textarea {
+    flex-basis: 100%;
+  }
+
+  .home .composer-actions {
+    margin-left: auto;
+  }
+
+  .msg-row {
+    max-width: 94%;
+  }
 }
