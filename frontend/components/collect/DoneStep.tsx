@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "./icons";
 
-export default function DoneStep({ participantId }: { participantId: string | null }) {
+export default function DoneStep({
+  participantId,
+  note,
+}: {
+  participantId: string | null;
+  /** Replaces the pilot's closing paragraph (used by /study). */
+  note?: ReactNode;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -43,11 +50,13 @@ export default function DoneStep({ participantId }: { participantId: string | nu
         Your data is stored under this code, without your name. If you ever want it deleted, give
         this code to the researcher.
       </p>
-      <p>
-        Some parts were deliberately repetitive, very hard or under time pressure, to bring out
-        different learning states. How many questions you got right doesn&apos;t matter at all —
-        your honest check-ins are what make the data useful.
-      </p>
+      {note ?? (
+        <p>
+          Some parts were deliberately repetitive, very hard or under time pressure, to bring out
+          different learning states. How many questions you got right doesn&apos;t matter at all —
+          your honest check-ins are what make the data useful.
+        </p>
+      )}
       <p className="muted">You can close this tab now.</p>
     </section>
   );

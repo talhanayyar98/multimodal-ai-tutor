@@ -184,6 +184,57 @@ export function logProblemEvent(sessionId: string, event: ProblemEventBody): voi
   }).catch(() => {});
 }
 
+// ---------- /study A/B study ----------
+
+/** The /study flow in order. Must match STUDY_STAGES in backend/src/models.ts. */
+export type StudyStage = "consent" | "camera" | "tutoring";
+
+/** After consent: a new participant code (LRN001…, ST001… for test runs); the group is drawn server-side. */
+export async function createStudyParticipant(isTest: boolean): Promise<{ participantId: string }> {
+  return parse(
+    await fetch(`${BACKEND_URL}/api/study/participants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consent: true, isTest }),
+    }),
+  );
+}
+
+/** A session in the participant's fixed group. */
+export async function startStudySession(participantId: string): Promise<SessionInfo> {
+  return parse(
+    await fetch(`${BACKEND_URL}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "study", participantId }),
+    }),
+  );
+}
+
+/** The participant reached `stage`; `note` is a short detail, e.g. how the camera check ended. */
+export async function setStudyStage(participantId: string, stage: StudyStage, note?: string): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/study/participants/${encodeURIComponent(participantId)}/stage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage, note }),
+    }),
+  );
+}
+
+export async function finishStudyParticipant(
+  participantId: string,
+  status: "completed" | "ended-early",
+): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/study/participants/${encodeURIComponent(participantId)}/finish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }),
+  );
+}
+
 // ---------- /collect pilot ----------
 
 export interface Intake {

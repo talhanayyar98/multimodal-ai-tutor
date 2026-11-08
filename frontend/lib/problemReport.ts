@@ -127,7 +127,12 @@ function starsFor(outcome: ProblemRecord["outcome"], wrong: number): Summary["st
   return wrong <= 2 ? 2 : 1;
 }
 
-export function summarize(rec: ProblemRecord): Summary {
+/**
+ * `states: false` (study mode) leaves out everything about inferred states:
+ * no state comparison and no insights that name a state. Stars and points
+ * never depend on states.
+ */
+export function summarize(rec: ProblemRecord, { states = true }: { states?: boolean } = {}): Summary {
   const attempts = rec.events.filter((e) => e.type === "attempt");
   const wrong = attempts.filter((e) => !e.correct).length;
   const help = rec.events.filter(isHelp);
@@ -136,11 +141,11 @@ export function summarize(rec: ProblemRecord): Summary {
   // Hints are free on purpose: costing points would discourage accepting help.
   const stars = starsFor(rec.outcome, wrong);
   const maxPoints = DIFFICULTY_POINTS[rec.problem.difficulty];
-  const comparison = compare(rec, firstHelpAt);
+  const comparison = states ? compare(rec, firstHelpAt) : null;
 
   // In priority order: the check-in, how the state changed, the outcome, wrong answers.
   const insights: string[] = [];
-  const firstAnswer = offers[0];
+  const firstAnswer = states ? offers[0] : undefined;
   if (firstAnswer) {
     const offered = rec.events.find((e) => e.type === "nudge-offered");
     const when = offered ? formatClock(offered.t - rec.startedAt) : "";

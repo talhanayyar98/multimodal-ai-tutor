@@ -3835,3 +3835,76 @@ body:has(.page.home) {
     display: none;
   }
 }
+
+/* ==========================================================================
+   /study: the step cards borrowed from /collect (consent, camera check,
+   done) on the main page's light theme. Only what was tuned for the dark
+   theme is re-coloured here; /collect itself is unchanged.
+   ========================================================================== */
+
+.page.study {
+  /* The dark theme's mint accent, deepened so it reads on white. */
+  --neon: #0d9488;
+  --neon-soft: rgba(13, 148, 136, 0.1);
+}
+
+.study .collect-card::before {
+  background: linear-gradient(90deg, transparent, var(--ai-1), var(--ai-3), transparent);
+}
+
+.study .collect-card h2 {
+  color: var(--text);
+}
+
+.study .collect-card .eyebrow {
+  color: var(--ai-2);
+}
+
+.study .collect-card .hero-title {
+  background: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.study .setup-item {
+  background: var(--surface-2);
+}
+
+.study .collect-card .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.study .collect-card .btn-gold {
+  background: linear-gradient(135deg, var(--ai-1), var(--ai-2));
+  color: #ffffff;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--ai-2) 65%, transparent);
+}
+
+.study .collect-card .btn-gold:disabled {
+  opacity: 1;
+  background: #e7e9f1;
+  color: #a2a7b9;
+  box-shadow: none;
+}
+
+.study .fact-icon {
+  background: color-mix(in srgb, var(--ai-2) 10%, transparent);
+  color: var(--ai-2);
+}
+
+.study .agree-card[data-checked="true"] .agree-box {
+  color: #ffffff;
+}
+
+.study .code-box {
+  border-color: color-mix(in srgb, var(--ai-2) 35%, transparent);
+  background: color-mix(in srgb, var(--ai-2) 7%, transparent);
+}
+
+.study .code-value {
+  color: var(--ai-2);
+}

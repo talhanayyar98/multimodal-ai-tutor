@@ -17,9 +17,11 @@ interface Row {
   state?: string;
 }
 
-function journey(rec: ProblemRecord): Row[] {
+function journey(rec: ProblemRecord, withStates: boolean): Row[] {
   const rows: Row[] = [{ t: rec.startedAt, what: "Problem started" }];
-  for (const r of rec.readings) rows.push({ t: r.t, what: "Signals read", state: r.state });
+  if (withStates) {
+    for (const r of rec.readings) rows.push({ t: r.t, what: "Signals read", state: r.state });
+  }
   for (const e of rec.events) {
     switch (e.type) {
       case "attempt":
@@ -58,6 +60,7 @@ export default function ProblemResults({
   session,
   modelNote,
   onNext,
+  showStates = true,
 }: {
   record: ProblemRecord;
   summary: Summary;
@@ -65,6 +68,11 @@ export default function ProblemResults({
   /** Which model the states come from, e.g. a demo model. */
   modelNote: string;
   onNext: () => void;
+  /**
+   * false (study mode): no state timeline, no state column, no model note.
+   * Pair it with summarize(…, { states: false }) so the insights match.
+   */
+  showStates?: boolean;
 }) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const solved = record.outcome === "solved";
@@ -157,17 +165,19 @@ export default function ProblemResults({
           </section>
         )}
 
-        <section className="results-section" aria-labelledby="timeline-title">
-          <h3 id="timeline-title">How you felt during the problem</h3>
-          <StateTimeline
-            startedAt={record.startedAt}
-            endedAt={record.endedAt}
-            readings={record.readings}
-            events={record.events}
-          />
-        </section>
+        {showStates && (
+          <section className="results-section" aria-labelledby="timeline-title">
+            <h3 id="timeline-title">How you felt during the problem</h3>
+            <StateTimeline
+              startedAt={record.startedAt}
+              endedAt={record.endedAt}
+              readings={record.readings}
+              events={record.events}
+            />
+          </section>
+        )}
 
-        {summary.comparison && (
+        {showStates && summary.comparison && (
           <section className="results-section" aria-labelledby="compare-title">
             <h3 id="compare-title">
               {summary.comparison.kind === "help" ? "Before vs after help" : "First half vs second half"}
@@ -189,24 +199,26 @@ export default function ProblemResults({
               <tr>
                 <th scope="col">Time</th>
                 <th scope="col">What happened</th>
-                <th scope="col">Your state</th>
+                {showStates && <th scope="col">Your state</th>}
               </tr>
             </thead>
             <tbody>
-              {journey(record).map((row, i) => (
+              {journey(record, showStates).map((row, i) => (
                 <tr key={i}>
                   <td>{formatClock(row.t - record.startedAt)}</td>
                   <td>{row.what}</td>
-                  <td>
-                    {row.state &&
-                      (isModelState(row.state) ? (
-                        <span className="state-pill" data-state={row.state}>
-                          <i className="dot" /> {STATE_LABEL[row.state]}
-                        </span>
-                      ) : (
-                        row.state
-                      ))}
-                  </td>
+                  {showStates && (
+                    <td>
+                      {row.state &&
+                        (isModelState(row.state) ? (
+                          <span className="state-pill" data-state={row.state}>
+                            <i className="dot" /> {STATE_LABEL[row.state]}
+                          </span>
+                        ) : (
+                          row.state
+                        ))}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -214,10 +226,12 @@ export default function ProblemResults({
           </div>
         </details>
 
-        <p className="results-note">
-          {modelNote} States are estimated from the last minute of webcam and mouse signals, so a
-          change shows up with a short delay.
-        </p>
+        {showStates && (
+          <p className="results-note">
+            {modelNote} States are estimated from the last minute of webcam and mouse signals, so a
+            change shows up with a short delay.
+          </p>
+        )}
 
         <footer className="results-foot">
           <button ref={nextRef} className="btn btn-next" onClick={onNext} data-testid="next-problem">

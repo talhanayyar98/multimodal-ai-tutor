@@ -223,8 +223,10 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 
 | Endpoint                      | Description                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `POST /api/session` (backend) | new session → `{ sessionId, abGroup, mode, persisted }`. Body `{}`: demo session (main page, random group). `{ mode: "study", participantId }`: the study participant's fixed group (404 unknown participant, 503 without MongoDB). `{ mode: "pilot", participantId }`: pilot session (always `control`) |
-| `POST /api/study/participants` | `{ consent: true, isTest? }` → `{ participantId }` (S001…, ST001… for test runs); draws the participant's group once (503 without MongoDB) |
+| `POST /api/session` (backend) | new session → `{ sessionId, abGroup, mode, persisted }`. Body `{}`: demo session (main page, random group). `{ mode: "study", participantId }`: the study participant's fixed group (404 unknown participant, 409 once they finished, 503 without MongoDB). `{ mode: "pilot", participantId }`: pilot session (always `control`) |
+| `POST /api/study/participants` | `{ consent: true, isTest? }` → `{ participantId }` (LRN001…, ST001… for test runs); draws the participant's group once (503 without MongoDB) |
+| `POST /api/study/participants/:id/stage` | `{ stage: consent\|camera\|tutoring, note? }` → records reaching a later stage (same stage again is a no-op; going back or after finishing → 409) |
+| `POST /api/study/participants/:id/finish` | `{ status: completed\|ended-early }` → final status (`completed` only from the last stage; 409 once finished) |
 | `POST /api/participants`      | `{ consent, intake, environment, settings, isTest }` → `{ participantId, blockOrder }` |
 | `POST /api/participants/:id/finish` | `{ status, post }` → marks the participant completed / ended early |
 | `POST /api/self-report`       | `{ sessionId, state, promptedAt, answeredAt, blockId?, exerciseId? }` → one check-in label |
@@ -246,7 +248,7 @@ persisted with their group.
 | Mode    | Where       | Group                                   | Participant |
 | ------- | ----------- | --------------------------------------- | ----------- |
 | `demo`  | `/`         | coin flip per session ("New chat" re-draws) | none — never analysed |
-| `study` | `/study` (page in progress; backend ready) | fixed per participant (between-subjects) | S001… in `studyparticipants` |
+| `study` | `/study`    | fixed per participant (between-subjects) | LRN001… in `studyparticipants` |
 | `pilot` | `/collect`  | always `control`                        | P001… in `participants` |
 
 Study groups use **permuted blocks of 4** (`backend/src/allocation.ts`): each run
@@ -255,11 +257,38 @@ of 4 participants holds 2 adaptive + 2 control in random order, stored in
 differ by more than 2, and the next assignment can't be guessed. Test runs
 (ST-codes) have their own counter and blocks, so they never use up a real slot.
 Study participants live in their own collection so `train.py` (which reads
-`participants`) can never train on them. For the A/B analysis, use sessions
-with `mode: "study"` joined to non-test `studyparticipants`; `problemevents`
-from study sessions carry the `participantId` directly.
+`participants`) can never train on them.
 
 Sessions stored before modes existed (no `mode` field) are read as `demo`.
+
+## The A/B study (`/study`)
+
+**http://localhost:3000/study** is the participant flow: consent → camera
+check → tutoring → done. Add `?test` for your own trial runs (ST001… codes,
+`isTest: true`).
+
+- **Codes:** the participant code (LRN001, LRN002, …) is created when they
+  agree on the consent screen, and their group is drawn at that moment. No
+  names and no background questions.
+- **Tutoring:** the same problem loop as `/` (`frontend/hooks/useTutorSession.ts`),
+  but nothing reveals the group or the inferred states: no state/group badges,
+  no "New chat", no state chart in the results, no "tuned to your state" tags.
+  The adaptive group still gets the check-in bubbles; they are the intervention.
+- **Progress:** each participant has a `status` (`in-progress` → `completed`
+  or `ended-early`), the furthest `stage` reached, and a `progress` log of
+  when each stage was reached (`tutoring` notes whether the camera check passed
+  or was skipped). Someone who closes the tab stays `in-progress`. Stages only
+  move forward, and `completed` is only accepted from the last stage.
+- **Everything by code:** `signalbatches`, `problemevents`, `hints` and
+  `chatmessages` from study (and pilot) sessions carry the `participantId`,
+  so `{ participantId: "LRN007" }` finds all of one person's data.
+- **For the analysis:** keep `studyparticipants` with `status: "completed"` and
+  `isTest: false`. Keep the others in the database too: a different drop-out
+  rate per group is worth reporting.
+
+The consent text is a placeholder until the supervisor / JYU ethics process
+approves it (`frontend/components/study/StudyConsent.tsx`). For now "Finish
+session" in the sidebar ends the tutoring and marks the participant completed.
 
 ## Graceful degradation
 

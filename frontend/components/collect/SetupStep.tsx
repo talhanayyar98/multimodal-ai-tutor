@@ -42,16 +42,22 @@ function Tip({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   );
 }
 
-/** Camera check + explanation of the check-ins, before the exercises start. */
+/**
+ * Camera check, before the exercises start. The pilot (/collect) also
+ * explains and practises the self-report check-ins; the study (/study,
+ * `probeIntervalS` omitted) has none, so that part is left out.
+ */
 export default function SetupStep({
   getFaceStreakMs,
   probeIntervalS,
   onDone,
 }: {
   getFaceStreakMs: () => number;
-  probeIntervalS: number;
+  /** Self-report interval of the pilot; omit for the study (no self-reports). */
+  probeIntervalS?: number;
   onDone: (reason: "face-ok" | "skipped") => void;
 }) {
+  const pilot = probeIntervalS !== undefined;
   const [faceOk, setFaceOk] = useState(false);
   const [lock, setLock] = useState(0); // 0..1 progress towards FACE_LOCK_MS
   const [elapsed, setElapsed] = useState(0);
@@ -112,6 +118,7 @@ export default function SetupStep({
           )}
         </SetupItem>
 
+        {pilot && (
         <SetupItem n={2} done={practice !== null} title="Check-ins">
           <p>
             About every {probeIntervalS} seconds this question pops up:{" "}
@@ -146,8 +153,9 @@ export default function SetupStep({
             )}
           </div>
         </SetupItem>
+        )}
 
-        <SetupItem n={3} done={false} title="During the questions">
+        <SetupItem n={pilot ? 3 : 2} done={false} title={pilot ? "During the questions" : "While you work"}>
           <div className="tips">
             <Tip icon={<ChatIcon />}>Work as you normally would and ask the tutor whenever you like.</Tip>
             <Tip icon={<PencilIcon />}>Pen and paper are fine, but please stay on this page.</Tip>
@@ -155,8 +163,14 @@ export default function SetupStep({
               Don&apos;t use a calculator — answers can be typed as fractions like 3/8.
             </Tip>
             <Tip icon={<TargetIcon />}>
-              Some questions are easy, some are very hard; how many you get right doesn&apos;t
-              matter.
+              {pilot ? (
+                <>
+                  Some questions are easy, some are very hard; how many you get right doesn&apos;t
+                  matter.
+                </>
+              ) : (
+                <>Some problems are easy, some are tricky. Do your best; skipping one is fine too.</>
+              )}
             </Tip>
           </div>
         </SetupItem>
@@ -169,7 +183,7 @@ export default function SetupStep({
           onClick={() => onDone("face-ok")}
           data-testid="setup-start"
         >
-          Start the questions <ArrowRightIcon size={15} />
+          {pilot ? "Start the questions" : "Start"} <ArrowRightIcon size={15} />
         </button>
         {!faceOk && elapsed < SKIP_OFFER_MS && (
           <span className="muted action-hint">Unlocks once the camera has found your face.</span>
