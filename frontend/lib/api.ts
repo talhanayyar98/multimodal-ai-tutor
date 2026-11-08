@@ -7,7 +7,8 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 export interface SessionInfo {
   sessionId: string;
   abGroup: "adaptive" | "control";
-  mode: "study" | "pilot";
+  /** "demo": main page (/). "study": A/B study (/study). "pilot": data collection (/collect). */
+  mode: "demo" | "study" | "pilot";
   participantId?: string;
   /** false when the backend has no MongoDB — nothing from the session is saved. */
   persisted: boolean;

@@ -4,6 +4,7 @@ import express from "express";
 import { connectDb } from "./db";
 import { pilotRouter } from "./pilotRoutes";
 import { router } from "./routes";
+import { studyRouter } from "./studyRoutes";
 
 // Bind 127.0.0.1, not 0.0.0.0: macOS AirPlay Receiver occupies *:5000, but a
 // loopback-specific bind on the same port still succeeds.
@@ -15,6 +16,7 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use("/api", router);
 app.use("/api", pilotRouter);
+app.use("/api", studyRouter);
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });

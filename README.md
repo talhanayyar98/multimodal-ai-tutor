@@ -223,7 +223,8 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 
 | Endpoint                      | Description                                                                                 |
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `POST /api/session` (backend) | new session, random A/B group → `{ sessionId, abGroup, mode, persisted }`; body `{ mode: "pilot", participantId }` for a pilot session (always `control`) |
+| `POST /api/session` (backend) | new session → `{ sessionId, abGroup, mode, persisted }`. Body `{}`: demo session (main page, random group). `{ mode: "study", participantId }`: the study participant's fixed group (404 unknown participant, 503 without MongoDB). `{ mode: "pilot", participantId }`: pilot session (always `control`) |
+| `POST /api/study/participants` | `{ consent: true, isTest? }` → `{ participantId }` (S001…, ST001… for test runs); draws the participant's group once (503 without MongoDB) |
 | `POST /api/participants`      | `{ consent, intake, environment, settings, isTest }` → `{ participantId, blockOrder }` |
 | `POST /api/participants/:id/finish` | `{ status, post }` → marks the participant completed / ended early |
 | `POST /api/self-report`       | `{ sessionId, state, promptedAt, answeredAt, blockId?, exerciseId? }` → one check-in label |
@@ -235,10 +236,30 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 | `POST /api/problem-events`    | `{ sessionId, type, t, problemId, … }` → main-page problem flow (shown, attempt, hint, chat, nudge-offered/accepted/dismissed/expired, nudge, solved, skipped) into `problemevents`; 202 without MongoDB |
 | `POST /infer` (ml-service)    | `{ features: number[][] }` → `{ state, probs }`                                             |
 
-**A/B groups** — assigned randomly at session start. `adaptive`: the Gemini
-prompt includes the inferred cognitive state; `control`: the same prompt without
-any state conditioning. Sessions, signal batches, and hints are all persisted
-with their group for later analysis.
+**A/B groups** — `adaptive`: the Gemini prompt includes the inferred cognitive
+state, and check-ins are offered; `control`: the same prompt without any state
+conditioning, no check-ins. Sessions, signal batches, and hints are all
+persisted with their group.
+
+**Session modes** — every session has a `mode`:
+
+| Mode    | Where       | Group                                   | Participant |
+| ------- | ----------- | --------------------------------------- | ----------- |
+| `demo`  | `/`         | coin flip per session ("New chat" re-draws) | none — never analysed |
+| `study` | `/study` (page in progress; backend ready) | fixed per participant (between-subjects) | S001… in `studyparticipants` |
+| `pilot` | `/collect`  | always `control`                        | P001… in `participants` |
+
+Study groups use **permuted blocks of 4** (`backend/src/allocation.ts`): each run
+of 4 participants holds 2 adaptive + 2 control in random order, stored in
+`allocationblocks` when the block's first participant joins. The groups never
+differ by more than 2, and the next assignment can't be guessed. Test runs
+(ST-codes) have their own counter and blocks, so they never use up a real slot.
+Study participants live in their own collection so `train.py` (which reads
+`participants`) can never train on them. For the A/B analysis, use sessions
+with `mode: "study"` joined to non-test `studyparticipants`; `problemevents`
+from study sessions carry the `participantId` directly.
+
+Sessions stored before modes existed (no `mode` field) are read as `demo`.
 
 ## Graceful degradation
 

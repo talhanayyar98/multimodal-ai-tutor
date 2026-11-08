@@ -1,13 +1,19 @@
 export type AbGroup = "adaptive" | "control";
-// "study": a real A/B session. "pilot": a labeling session that collects
-// self-reports as training data — always control, excluded from the A/B analysis.
-export type SessionMode = "study" | "pilot";
+// "demo": the open main page (/) — random group, no participant, never analysed.
+// "study": an A/B study session (/study) — the group is fixed per study
+//   participant (S001…), see allocation.ts.
+// "pilot": a labeling session (/collect) that collects self-reports as training
+//   data — always control, excluded from the A/B analysis.
+export type SessionMode = "demo" | "study" | "pilot";
 
 export interface SessionInfo {
   sessionId: string;
   abGroup: AbGroup;
   mode: SessionMode;
-  /** Set for pilot sessions; lets training split train/test by person, not by window. */
+  /**
+   * Set for pilot sessions (P001…; lets training split train/test by person,
+   * not by window) and study sessions (S001…); never for demo sessions.
+   */
   participantId?: string;
   createdAt: Date;
 }
