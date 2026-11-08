@@ -8,6 +8,7 @@ import { Router, type Response } from "express";
 import { assignGroup } from "./allocation";
 import { dbReady } from "./db";
 import { Counter, STUDY_STAGES, StudyParticipant, TESTS, TestAnswer, type StudyStage } from "./models";
+import { scoreSus, scoreTlx } from "./questionnaires";
 
 export const studyRouter = Router();
 
@@ -190,6 +191,45 @@ studyRouter.post("/study/participants/:participantId/stage", async (req, res) =>
   } catch (err) {
     console.warn("[db] failed to update study stage:", (err as Error).message);
     res.status(500).json({ error: "stage not stored" });
+  }
+});
+
+// A questionnaire about the tutoring (NASA-TLX or SUS), answered in full.
+// Only accepted at that questionnaire's stage, and stored once: a repeat
+// (e.g. a retried request) is ignored and the first answers count.
+studyRouter.post("/study/participants/:participantId/questionnaire", async (req, res) => {
+  if (!requireDb(res)) return;
+  const { participantId } = req.params;
+  const { kind, answers, shownAt, answeredAt } = req.body ?? {};
+  const scored = kind === "tlx" ? scoreTlx(answers) : kind === "sus" ? scoreSus(answers) : null;
+  if (!scored || !isEpochMs(shownAt) || !isEpochMs(answeredAt) || answeredAt < shownAt) {
+    res.status(400).json({
+      error:
+        "expected { kind: tlx, answers: { mental, physical, temporal, performance, effort, frustration: 0–100 in steps of 5 } } " +
+        "or { kind: sus, answers: ten whole numbers 1–5 }, plus shownAt, answeredAt >= shownAt",
+    });
+    return;
+  }
+  try {
+    const updated = await StudyParticipant.findOneAndUpdate(
+      { participantId, status: "in-progress", stage: kind, [`${kind}.answeredAt`]: { $exists: false } },
+      { $set: { [kind]: { ...scored, shownAt, answeredAt } } },
+    );
+    if (updated) {
+      res.status(201).json({ ok: true });
+      return;
+    }
+    const current = await StudyParticipant.findOne({ participantId }, { status: 1, stage: 1, [kind]: 1 }).lean();
+    if (!current) {
+      res.status(404).json({ error: "unknown study participant" });
+    } else if ((kind === "tlx" ? current.tlx?.answeredAt : current.sus?.answeredAt) !== undefined) {
+      res.json({ ok: true, duplicate: true });
+    } else {
+      res.status(409).json({ error: `not at the ${kind} questionnaire (status ${current.status}, stage ${current.stage})` });
+    }
+  } catch (err) {
+    console.warn("[db] failed to store questionnaire:", (err as Error).message);
+    res.status(500).json({ error: "questionnaire not stored" });
   }
 });
 

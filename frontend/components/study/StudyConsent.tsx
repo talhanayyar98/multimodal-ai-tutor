@@ -40,8 +40,9 @@ export default function StudyConsent({
         This session is part of an MSc thesis at the University of Jyväskylä. You will take a short
         quiz, then solve {STUDY_PROBLEMS.length} short maths and logic problems (at most{" "}
         {STUDY_TIME_LIMIT_MIN} minutes) with an AI tutor that you can chat with and ask for hints,
-        and then take a second short quiz. In total about 35 minutes. The study compares different
-        versions of the tutor; which one you get is decided at random.
+        answer two short questionnaires about the tutor, and take a second short quiz. In total
+        about 40 minutes. The study compares different versions of the tutor; which one you get is
+        decided at random.
       </p>
 
       <div className="facts">
@@ -72,8 +73,8 @@ export default function StudyConsent({
           <p className="info-sub">Also:</p>
           <ul>
             <Row icon={<PulseIcon />}>
-              Your quiz answers, your answers to the problems, how long each took, the hints you
-              asked for and your chat with the tutor.
+              Your quiz and questionnaire answers, your answers to the problems, how long each
+              took, the hints you asked for and your chat with the tutor.
             </Row>
           </ul>
         </div>

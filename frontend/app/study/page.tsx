@@ -1,7 +1,7 @@
 "use client";
 
 // A/B study (between-subjects):
-//   consent → pre-test → camera check → tutoring → post-test → done.
+//   consent → pre-test → camera check → tutoring → NASA-TLX → SUS → post-test → done.
 //
 // The participant gets a code (LRN001…) when they agree; their group and test
 // order are drawn at that moment (balanced blocks of 4, see
@@ -15,6 +15,9 @@
 //   the inferred states; the adaptive group still gets the check-in bubbles,
 //   since they are the intervention. The camera check comes right before it,
 //   so the camera keeps running from the check into the tutoring.
+// - NASA-TLX (raw) and SUS about the tutoring (lib/studyQuestionnaires.ts),
+//   right after it: TLX belongs right after the task, and neither rating
+//   should be coloured by how the post-test went.
 // Each stage and the final status are stored with the participant, so the
 // analysis can keep only status "completed".
 //
@@ -31,6 +34,7 @@ import SetupStep from "@/components/collect/SetupStep";
 import ProblemResults from "@/components/results/ProblemResults";
 import SessionCard from "@/components/SessionCard";
 import StudyConsent from "@/components/study/StudyConsent";
+import StudyQuestionnaire from "@/components/study/StudyQuestionnaire";
 import StudyTest from "@/components/study/StudyTest";
 import TutorWorkspace from "@/components/TutorWorkspace";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
@@ -50,7 +54,7 @@ import type { Features } from "@/lib/features";
 import { STUDY_PROBLEMS, STUDY_TIME_LIMIT_MS } from "@/lib/studyTask";
 import { TEST_FORMS } from "@/lib/studyTests";
 
-type Step = "consent" | "pretest" | "camera" | "tutoring" | "posttest" | "done";
+type Step = "consent" | "pretest" | "camera" | "tutoring" | "tlx" | "sus" | "posttest" | "done";
 /** How the tutoring ended: every problem done, time limit reached, or "End session". */
 type TutoringEnd = "all-done" | "time-up" | "ended-early";
 
@@ -193,8 +197,8 @@ export default function StudyPage() {
     }
   }
 
-  // After the tutoring: on to the post-test (the note says how the tutoring
-  // ended), or straight to the end for "End session".
+  // After the tutoring: on to the questionnaires (the note says how the
+  // tutoring ended), or straight to the end for "End session".
   async function saveTutoringEnd(how: TutoringEnd) {
     if (!participantId) return;
     setSaving(true);
@@ -205,8 +209,8 @@ export default function StudyPage() {
         setEndedEarly(true);
         setStep("done");
       } else {
-        await setStudyStage(participantId, "posttest", how);
-        setStep("posttest");
+        await setStudyStage(participantId, "tlx", how);
+        setStep("tlx");
       }
     } catch (err) {
       setError(`Could not save your progress (${(err as Error).message}). Please tell the researcher.`);
@@ -236,6 +240,19 @@ export default function StudyPage() {
     return () => clearTimeout(timer);
   }, [tutoringActive, tutoringStartedAt, timeLimitMs]);
 
+  // The questionnaire shows the error (and keeps the answers) if these throw.
+  async function handleTlxDone() {
+    if (!participantId) return;
+    await setStudyStage(participantId, "sus");
+    setStep("sus");
+  }
+
+  async function handleSusDone() {
+    if (!participantId) return;
+    await setStudyStage(participantId, "posttest");
+    setStep("posttest");
+  }
+
   // StudyTest shows its own "Try again" if this throws.
   async function handlePosttestDone() {
     if (!participantId) return;
@@ -243,8 +260,8 @@ export default function StudyPage() {
     setStep("done");
   }
 
-  // "End session" during a quiz (the tutoring has its own, which also closes the run).
-  async function endDuringTest() {
+  // "End session" in a quiz or questionnaire (the tutoring has its own, which also closes the run).
+  async function endOutsideTutoring() {
     if (!participantId || !window.confirm("End the session now? Everything so far is kept.")) return;
     setError(null);
     try {
@@ -305,7 +322,7 @@ export default function StudyPage() {
           items={TEST_FORMS[testForms.pre]}
           participantId={participantId}
           onDone={handlePretestDone}
-          onEndSession={() => void endDuringTest()}
+          onEndSession={() => void endOutsideTutoring()}
         />
       )}
 
@@ -371,13 +388,23 @@ export default function StudyPage() {
         />
       )}
 
+      {(step === "tlx" || step === "sus") && participantId && (
+        <StudyQuestionnaire
+          key={step}
+          kind={step}
+          participantId={participantId}
+          onDone={step === "tlx" ? handleTlxDone : handleSusDone}
+          onEndSession={() => void endOutsideTutoring()}
+        />
+      )}
+
       {step === "posttest" && participantId && testForms && (
         <StudyTest
           test="post"
           items={TEST_FORMS[testForms.post]}
           participantId={participantId}
           onDone={handlePosttestDone}
-          onEndSession={() => void endDuringTest()}
+          onEndSession={() => void endOutsideTutoring()}
         />
       )}
 

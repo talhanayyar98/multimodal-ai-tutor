@@ -225,7 +225,8 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
 | `POST /api/session` (backend) | new session → `{ sessionId, abGroup, mode, persisted }`. Body `{}`: demo session (main page, random group). `{ mode: "study", participantId }`: the study participant's fixed group (404 unknown participant, 409 once they finished, 503 without MongoDB). `{ mode: "pilot", participantId }`: pilot session (always `control`) |
 | `POST /api/study/participants` | `{ consent: true, isTest? }` → `{ participantId, testForms: { pre, post } }` (LRN001…, ST001… for test runs); draws the participant's group and test order once (503 without MongoDB) |
-| `POST /api/study/participants/:id/stage` | `{ stage: consent\|pretest\|camera\|tutoring\|posttest, note? }` → records reaching a later stage (same stage again is a no-op; going back or after finishing → 409) |
+| `POST /api/study/participants/:id/stage` | `{ stage: consent\|pretest\|camera\|tutoring\|tlx\|sus\|posttest, note? }` → records reaching a later stage (same stage again is a no-op; going back or after finishing → 409) |
+| `POST /api/study/participants/:id/questionnaire` | `{ kind: "tlx", answers: { mental, physical, temporal, performance, effort, frustration } }` (0–100, steps of 5) or `{ kind: "sus", answers: [ten 1–5] }`, plus `shownAt`, `answeredAt` → scored and stored once (only at that questionnaire's stage) |
 | `POST /api/study/participants/:id/test-answers` | `{ test: pre\|post, itemId, position, answer, dontKnow, correct, skill, mirrors, shownAt, answeredAt }` → one quiz answer (only at that test's stage, only items of the participant's form; a repeat of the same item is ignored) |
 | `POST /api/study/participants/:id/finish` | `{ status: completed\|ended-early }` → final status (`completed` only from the last stage; 409 once finished) |
 | `POST /api/participants`      | `{ consent, intake, environment, settings, isTest }` → `{ participantId, blockOrder }` |
@@ -265,8 +266,10 @@ Sessions stored before modes existed (no `mode` field) are read as `demo`.
 ## The A/B study (`/study`)
 
 **http://localhost:3000/study** is the participant flow: consent → pre-test →
-camera check → tutoring → post-test → done (about 35 minutes). The camera
-check sits right before the tutoring so the camera keeps running into it.
+camera check → tutoring → NASA-TLX → SUS → post-test → done (about 40
+minutes). The camera check sits right before the tutoring so the camera keeps
+running into it; the questionnaires come right after it, so they rate the
+tutoring while it is fresh and before the post-test can colour the ratings.
 Researcher-only URL options:
 
 - `?test`: your own trial runs (ST001… codes, `isTest: true`).
@@ -307,15 +310,32 @@ What the study page does:
 - **Ending the tutoring:** after problem 12 the results button says "Finish".
   At the time limit, or when the participant presses "End session", a problem
   that is still open is logged as `unfinished` (and an open check-in as
-  `nudge-expired`). Last problem or time limit → the post-test, whose
-  `progress` entry notes `all-done` or `time-up`; finishing the post-test →
-  `completed`. "End session" (in the tutoring or in either quiz) →
-  `ended-early`, with no post-test.
+  `nudge-expired`). Last problem or time limit → the questionnaires, whose
+  first `progress` entry (`tlx`) notes `all-done` or `time-up`; finishing the
+  post-test → `completed`. "End session" (in the tutoring, a quiz or a
+  questionnaire) → `ended-early`, with nothing after it.
+- **Questionnaires** (`frontend/lib/studyQuestionnaires.ts`, scored in
+  `backend/src/questionnaires.ts`), both about the tutoring and identical for
+  both groups. Every item must be answered; nothing is pre-selected.
+  - **NASA-TLX, raw version:** the six standard scales (mental, physical,
+    temporal demand, performance, effort, frustration), 0–100 in steps of 5 on
+    a 21-point scale like the paper form, official wording with "the task"
+    explained as the tutoring. Performance runs Perfect (0) → Failure (100),
+    so higher always means more workload. Stored as `tlx` on the participant:
+    the six ratings and `raw` = their mean.
+  - **SUS:** the ten standard items in the standard order, 1 = strongly
+    disagree … 5 = strongly agree, with two documented, score-neutral wording
+    changes: "this system" → "the AI tutor" and "cumbersome" → "awkward"
+    (Finstad 2006; Bangor et al. 2008). Stored as `sus`: the ten answers and
+    the standard 0–100 `score` (odd items answer − 1, even items 5 − answer,
+    sum × 2.5).
+  Each is stored once (a retried submit doesn't overwrite it), with the time
+  it was shown and answered.
 - **Progress:** each participant has a `status` (`in-progress` → `completed`
   or `ended-early`), the furthest `stage` reached, and a `progress` log of
   when each stage was reached (`tutoring` notes whether the camera check passed
-  or was skipped, `posttest` how the tutoring ended). Someone who closes the
-  tab stays `in-progress`. Stages only move forward, and `completed` is only
+  or was skipped, `tlx` how the tutoring ended). Someone who closes the tab
+  stays `in-progress`. Stages only move forward, and `completed` is only
   accepted from the last stage (`posttest`).
 - **Everything by code:** `testanswers`, `signalbatches`, `problemevents`,
   `hints` and `chatmessages` carry the `participantId`, so

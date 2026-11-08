@@ -173,8 +173,15 @@ const ExerciseEventSchema = new Schema({
 // The /study flow, in order. A participant only ever moves forward, and can
 // only be marked "completed" after reaching the last stage.
 // Must match StudyStage in frontend/lib/api.ts.
-export const STUDY_STAGES = ["consent", "pretest", "camera", "tutoring", "posttest"] as const;
+// The questionnaires come right after the tutoring, so they rate it while it
+// is fresh and before the post-test can colour the ratings.
+export const STUDY_STAGES = ["consent", "pretest", "camera", "tutoring", "tlx", "sus", "posttest"] as const;
 export type StudyStage = (typeof STUDY_STAGES)[number];
+
+// NASA-TLX, raw (unweighted) version: six 0–100 scales in steps of 5.
+// `performance` runs from 0 = perfect to 100 = failure, like the original.
+export const TLX_SCALES = ["mental", "physical", "temporal", "performance", "effort", "frustration"] as const;
+export const SUS_ITEM_COUNT = 10;
 
 // Pre-/post-test forms (frontend/lib/studyTests.ts): "AB" = form A before the
 // tutoring and form B after it, "BA" the reverse. Balanced within each group
@@ -204,6 +211,21 @@ const StudyParticipantSchema = new Schema({
   // collection is the source of truth). `answered` includes "I don't know".
   pretest: { form: String, answered: Number, correct: Number, dontKnow: Number },
   posttest: { form: String, answered: Number, correct: Number, dontKnow: Number },
+  // Questionnaires about the tutoring, stored once. Times are client epoch ms.
+  // tlx.raw = mean of the six scales (Raw TLX, 0–100, higher = more workload).
+  tlx: {
+    mental: Number,
+    physical: Number,
+    temporal: Number,
+    performance: Number,
+    effort: Number,
+    frustration: Number,
+    raw: Number,
+    shownAt: Number,
+    answeredAt: Number,
+  },
+  // sus.items = the ten 1–5 answers in item order; sus.score = standard SUS 0–100.
+  sus: { items: { type: [Number], default: undefined }, score: Number, shownAt: Number, answeredAt: Number },
   status: { type: String, enum: STUDY_STATUSES, default: "in-progress" },
   // The furthest stage reached, and when each stage was reached (where people drop out).
   stage: { type: String, enum: STUDY_STAGES, default: "consent" },

@@ -188,7 +188,22 @@ export function logProblemEvent(sessionId: string, event: ProblemEventBody): voi
 // ---------- /study A/B study ----------
 
 /** The /study flow in order. Must match STUDY_STAGES in backend/src/models.ts. */
-export type StudyStage = "consent" | "pretest" | "camera" | "tutoring" | "posttest";
+export type StudyStage = "consent" | "pretest" | "camera" | "tutoring" | "tlx" | "sus" | "posttest";
+
+export type QuestionnaireBody =
+  | { kind: "tlx"; answers: Record<string, number>; shownAt: number; answeredAt: number }
+  | { kind: "sus"; answers: number[]; shownAt: number; answeredAt: number };
+
+/** A questionnaire about the tutoring, answered in full (scored by the backend; stored once). */
+export async function postQuestionnaire(participantId: string, body: QuestionnaireBody): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/study/participants/${encodeURIComponent(participantId)}/questionnaire`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
 
 export interface NewStudyParticipant {
   participantId: string;
