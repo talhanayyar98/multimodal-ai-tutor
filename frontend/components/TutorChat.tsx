@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import AiSparkle from "@/components/AiSparkle";
 import { ArrowRightIcon } from "@/components/collect/icons";
-import { fetchHint, sendChat, type ChatTurn } from "@/lib/api";
+import NudgeBubble from "@/components/NudgeBubble";
+import { fetchHint, fetchNudge, sendChat, type ChatTurn } from "@/lib/api";
+import { NUDGE_COPY, type NudgeOffer } from "@/lib/nudges";
 
 const PROBLEM =
   "A fair six-sided die is rolled twice. What is the probability that the sum of the two rolls is at least 10?";
@@ -16,13 +18,15 @@ const WELCOME_EXTERNAL_EXERCISE =
   "I'm your tutor. Stuck or unsure about the current question? Ask me anything, or tap Hint for a nudge.";
 
 type Role = "user" | "tutor" | "hint";
-type Pending = "chat" | "hint" | null;
+type Pending = "chat" | "hint" | "nudge" | null;
 
 interface Message {
   id: number;
   role: Role;
   text: string;
   state?: string;
+  /** Label above a hint bubble (default "Hint"). */
+  tag?: string;
 }
 
 let nextId = 1; // module scope: ids stay unique across chat resets
@@ -59,6 +63,13 @@ export default function TutorChat({
   problem = PROBLEM,
   showExercise = true,
   className,
+  welcome: welcomeOverride,
+  nudge = null,
+  nudgeNote = "",
+  nudgeContext,
+  onNudgeAnswer,
+  onReply,
+  onBusyChange,
 }: {
   sessionId: string | null;
   abGroup: "adaptive" | "control" | null;
@@ -69,27 +80,51 @@ export default function TutorChat({
   /** false when the page displays the exercise itself. */
   showExercise?: boolean;
   className?: string;
+  /** Replaces the opening message (keep it a stable string). */
+  welcome?: string;
+  /** A state-triggered check-in to show above the input (adaptive group, main page). */
+  nudge?: NudgeOffer | null;
+  /** Why the tutor is checking in, shown small in the bubble. */
+  nudgeNote?: string;
+  /** Sent with an accepted check-in so the help fits where the learner is. */
+  nudgeContext?: { solution?: string; wrongAnswers: string[] };
+  /** The learner answered the check-in; on yes the chat fetches the help itself. */
+  onNudgeAnswer?: (offer: NudgeOffer, accepted: boolean) => void;
+  /** A tutor reply arrived ("nudge" = help from an accepted check-in). */
+  onReply?: (kind: "chat" | "hint" | "nudge", state?: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState<Pending>(null);
   const [switching, setSwitching] = useState(false);
+  const [nudgeThinking, setNudgeThinking] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // Bumped whenever the conversation restarts, so a reply that arrives for
+  // the previous problem or session is dropped instead of landing in the new one.
+  const conversation = useRef(0);
   const busy = pending !== null;
 
-  const welcome = showExercise ? WELCOME : WELCOME_EXTERNAL_EXERCISE;
+  const welcome = welcomeOverride ?? (showExercise ? WELCOME : WELCOME_EXTERNAL_EXERCISE);
 
   // A (re)connected session or a new exercise starts a fresh conversation.
   useEffect(() => {
+    conversation.current++;
+    setPending(null);
     if (sessionId) setMessages([{ id: nextId++, role: "tutor", text: welcome }]);
   }, [sessionId, problem, welcome]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, pending]);
+  }, [messages, pending, nudge]);
 
-  function push(role: Role, text: string, state?: string) {
-    setMessages((m) => [...m, { id: nextId++, role, text, state }]);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    // Only report changes, not new callback identities.
+  }, [busy]);
+
+  function push(role: Role, text: string, state?: string, tag?: string) {
+    setMessages((m) => [...m, { id: nextId++, role, text, state, tag }]);
   }
 
   function recentHistory(): ChatTurn[] {
@@ -105,30 +140,68 @@ export default function TutorChat({
     setInput("");
     push("user", text);
     setPending("chat");
+    const conv = conversation.current;
     try {
       const res = await sendChat(sessionId, text, recentHistory(), problem);
+      if (conv !== conversation.current) return;
       push("tutor", res.reply, res.state);
+      onReply?.("chat", res.state);
     } catch {
+      if (conv !== conversation.current) return;
       push("tutor", "I couldn't reach the server just now — give it a second and try again.");
     } finally {
-      setPending(null);
+      if (conv === conversation.current) setPending(null);
     }
   }
 
   async function handleHint() {
     if (!sessionId || busy) return;
     setPending("hint");
+    const conv = conversation.current;
     try {
       const res = await fetchHint(sessionId, problem);
+      if (conv !== conversation.current) return;
       push("hint", res.hint, res.state);
+      onReply?.("hint", res.state);
     } catch {
+      if (conv !== conversation.current) return;
       push("tutor", "I couldn't fetch a hint just now — try again in a moment.");
     } finally {
-      setPending(null);
+      if (conv === conversation.current) setPending(null);
+    }
+  }
+
+  async function handleNudgeAnswer(accepted: boolean) {
+    if (!nudge) return;
+    const offer = nudge;
+    onNudgeAnswer?.(offer, accepted);
+    if (!accepted || !sessionId || busy) return;
+    const copy = NUDGE_COPY[offer.state];
+    push("user", copy.userSays);
+    setNudgeThinking(copy.thinking);
+    setPending("nudge");
+    const conv = conversation.current;
+    try {
+      const res = await fetchNudge(sessionId, {
+        state: offer.state,
+        problem,
+        solution: nudgeContext?.solution,
+        wrongAnswers: nudgeContext?.wrongAnswers ?? [],
+      });
+      if (conv !== conversation.current) return;
+      push("hint", res.reply, offer.state, copy.tag);
+      onReply?.("nudge", offer.state);
+    } catch {
+      if (conv !== conversation.current) return;
+      push("tutor", "I couldn't reach the server just now. Tap Hint in a moment and I'll try again.");
+    } finally {
+      if (conv === conversation.current) setPending(null);
     }
   }
 
   function handleReset() {
+    conversation.current++;
+    setPending(null);
     setMessages([{ id: nextId++, role: "tutor", text: welcome }]);
   }
 
@@ -195,7 +268,7 @@ export default function TutorChat({
             <div className="msg" data-role={m.role}>
               {m.role === "hint" && (
                 <span className="msg-tag">
-                  <AiSparkle size={11} /> Hint
+                  <AiSparkle size={11} /> {m.tag ?? "Hint"}
                 </span>
               )}
               {m.role === "user" ? m.text : <RevealText text={m.text} />}
@@ -206,13 +279,17 @@ export default function TutorChat({
           </div>
         ))}
         {pending && (
-          <div className="msg-row" data-role={pending === "hint" ? "hint" : "tutor"}>
+          <div className="msg-row" data-role={pending === "chat" ? "tutor" : "hint"}>
             <span className="msg-avatar" data-thinking="true" aria-hidden="true">
               <AiSparkle size={15} />
             </span>
-            <div className="msg msg-thinking" data-kind={pending} role="status">
+            <div className="msg msg-thinking" data-kind={pending === "chat" ? "chat" : "hint"} role="status">
               <span className="thinking-label">
-                {pending === "hint" ? "Finding a hint for you…" : "Thinking…"}
+                {pending === "hint"
+                  ? "Finding a hint for you…"
+                  : pending === "nudge" && nudgeThinking
+                    ? nudgeThinking
+                    : "Thinking…"}
               </span>
               <span className="shimmer-line" />
               <span className="shimmer-line" />
@@ -222,6 +299,8 @@ export default function TutorChat({
         )}
         <div ref={endRef} />
       </div>
+
+      {nudge && <NudgeBubble key={nudge.id} offer={nudge} disabled={busy} note={nudgeNote} onAnswer={handleNudgeAnswer} />}
 
       <div className="composer">
         <div className="composer-box">

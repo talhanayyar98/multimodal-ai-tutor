@@ -54,7 +54,44 @@ const HintSchema = new Schema({
   state: String,
   abGroup: { type: String, enum: AB_GROUPS },
   problem: String,
+  // "manual": the Hint button. "nudge": help the learner accepted from a
+  // state-triggered check-in (adaptive group only); `state` is the state it was offered for.
+  kind: { type: String, enum: ["manual", "nudge"], default: "manual" },
   createdAt: { type: Date, default: Date.now },
+});
+
+// Main-page (/) problem flow, for the A/B outcome analysis: time to solve,
+// attempts, hints, and how check-in offers were answered.
+export const PROBLEM_EVENT_TYPES = [
+  "shown", // a problem appeared: text + expected answer
+  "attempt", // answer + correct
+  "hint", // the Hint button's reply arrived
+  "chat", // a tutor chat reply arrived
+  "nudge-offered", // the tutor noticed `state` and offered help (adaptive only)
+  "nudge-accepted",
+  "nudge-dismissed",
+  "nudge-expired", // offer faded away unanswered
+  "nudge", // the accepted check-in's help arrived
+  "solved",
+  "skipped",
+] as const;
+
+const ProblemEventSchema = new Schema({
+  sessionId: { type: String, required: true, index: true },
+  abGroup: { type: String, enum: AB_GROUPS },
+  type: { type: String, enum: PROBLEM_EVENT_TYPES, required: true },
+  problemId: String,
+  topic: String,
+  difficulty: String,
+  /** 1-based position of the problem in the session. */
+  problemNo: Number,
+  text: String,
+  expected: String,
+  answer: String,
+  correct: Boolean,
+  state: String,
+  t: { type: Number, required: true }, // client epoch ms, same clock as the signal windows
+  receivedAt: { type: Date, default: Date.now },
 });
 
 const ChatMessageSchema = new Schema({
@@ -135,6 +172,7 @@ const CounterSchema = new Schema({
 export const Session = model("Session", SessionSchema);
 export const SignalBatch = model("SignalBatch", SignalBatchSchema);
 export const Hint = model("Hint", HintSchema);
+export const ProblemEvent = model("ProblemEvent", ProblemEventSchema);
 export const ChatMessage = model("ChatMessage", ChatMessageSchema);
 export const SelfReport = model("SelfReport", SelfReportSchema);
 export const Participant = model("Participant", ParticipantSchema);
