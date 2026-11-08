@@ -10,7 +10,9 @@ appeared, so answering the pop-up never leaks into its own input.
      always tested on people it never saw), against simple baselines.
   4. Train the final model on everyone and save it to runs/<time>-<data>/:
      model.pt (weights), scaler.json (preprocessing), metrics.json,
-     report.md and dataset.npz (the exact examples, for reproducibility).
+     report.md, dataset.npz (the exact examples, for reproducibility),
+     cv_predictions.npz (each example's prediction from the fold where it
+     was a test example) and report.html (visualize.py: open in a browser).
 
 Usage, from ml-service/:
   .venv/bin/python train.py --data synthetic   # generated T-participants: pipeline test only
@@ -39,10 +41,23 @@ from torch import nn
 
 from model import FEATURE_DIM, STATES, CognitiveStateLSTM
 from preprocess import Scaler
+from visualize import write_html
 
 SEQ_LEN = 12  # = MAX_RECENT_WINDOWS in backend/src/store.ts: one minute of 5-s windows
 MAX_GAP_MS = 10_000  # the newest window must end at most 10 s before the pop-up
 MAX_SPAN_MS = 75_000  # the 12 windows must be (nearly) back to back
+
+# How training and testing are set up: every number that decides the split and
+# the training loop lives here (report.html shows them next to the results).
+FOLDS = 5  # cross-validation folds (default of --folds): each person is a test person exactly once
+VAL_SHARE = 0.15  # share of the training PEOPLE held out to decide when to stop training
+MAX_EPOCHS = 80
+PATIENCE = 10  # stop after this many epochs without a better validation macro-F1
+BATCH_SIZE = 64
+LEARNING_RATE = 1e-3
+WEIGHT_DECAY = 1e-4
+SHORT_SEQ_SHARE = 0.3  # share of batches cut to their last 1–11 windows
+
 LABELS = list(range(len(STATES)))
 ROOT = Path(__file__).resolve().parent
 
@@ -142,46 +157,69 @@ def predict_lstm(model: nn.Module, X: np.ndarray) -> np.ndarray:
         return model(torch.from_numpy(X)).argmax(dim=1).numpy()
 
 
+def lstm_probabilities(model: nn.Module, X: np.ndarray) -> np.ndarray:
+    """(n, len(STATES)) softmax probabilities; their argmax is predict_lstm's answer."""
+    model.eval()
+    with torch.no_grad():
+        return torch.softmax(model(torch.from_numpy(X)), dim=1).numpy()
+
+
 def train_lstm(
     X_fit: np.ndarray,
     y_fit: np.ndarray,
     X_val: np.ndarray,
     y_val: np.ndarray,
     seed: int,
-    max_epochs: int = 80,
-    patience: int = 10,
-) -> tuple[CognitiveStateLSTM, dict[str, float]]:
-    """Adam + class-weighted cross-entropy; keeps the epoch with the best validation macro-F1."""
+    max_epochs: int = MAX_EPOCHS,
+    patience: int = PATIENCE,
+) -> tuple[CognitiveStateLSTM, dict[str, object]]:
+    """Adam + class-weighted cross-entropy; keeps the epoch with the best validation macro-F1.
+
+    The returned info includes the per-epoch history (training loss, macro-F1 on
+    the training and validation people) that report.html draws as curves.
+    """
     seed_everything(seed)
     rng = np.random.default_rng(seed)
     model = CognitiveStateLSTM()
     counts = np.bincount(y_fit, minlength=len(STATES)).astype(np.float32)
     class_weights = torch.tensor(len(y_fit) / (len(STATES) * np.maximum(counts, 1)), dtype=torch.float32)
     loss_fn = nn.CrossEntropyLoss(weight=class_weights)  # rare states count as much as common ones
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     X_t, y_t = torch.from_numpy(X_fit), torch.from_numpy(y_fit)
 
     best_f1, best_epoch, best_state, stale = -1.0, 0, None, 0
+    history: list[dict[str, float | int | None]] = []
+    epoch = 0
     for epoch in range(1, max_epochs + 1):
         model.train()
         order = rng.permutation(len(y_fit))
-        for start in range(0, len(order), 64):
-            batch = torch.from_numpy(order[start : start + 64])
+        loss_sum = 0.0
+        for start in range(0, len(order), BATCH_SIZE):
+            batch = torch.from_numpy(order[start : start + BATCH_SIZE])
             xb = X_t[batch]
             # Sometimes show only the last 1–11 windows: in the app the first
             # minute of a session has fewer than 12 (the service passes 1–12).
-            if rng.random() < 0.3:
+            if rng.random() < SHORT_SEQ_SHARE:
                 xb = xb[:, -int(rng.integers(1, SEQ_LEN)) :]
             loss = loss_fn(model(xb), y_t[batch])
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            loss_sum += float(loss.item()) * len(batch)
+        step = {
+            "epoch": epoch,
+            "train_loss": round(loss_sum / len(order), 4),
+            "train_f1": round(macro_f1(y_fit, predict_lstm(model, X_fit)), 4),
+            "val_f1": None,
+        }
+        history.append(step)
 
         if len(y_val) == 0:  # too few people for a validation split: fixed number of epochs
             best_epoch, best_state = epoch, None
             continue
         val_f1 = macro_f1(y_val, predict_lstm(model, X_val))
+        step["val_f1"] = round(val_f1, 4)
         if val_f1 > best_f1 + 1e-4:
             best_f1, best_epoch, stale = val_f1, epoch, 0
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
@@ -191,7 +229,12 @@ def train_lstm(
                 break
     if best_state is not None:
         model.load_state_dict(best_state)
-    return model, {"best_epoch": best_epoch, "val_macro_f1": round(best_f1, 4)}
+    return model, {
+        "best_epoch": best_epoch,
+        "val_macro_f1": round(best_f1, 4),
+        "stopped_epoch": epoch,
+        "history": history,
+    }
 
 
 def window_stats(X: np.ndarray) -> np.ndarray:
@@ -204,14 +247,20 @@ def split_fit_val(groups: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray
     idx = np.arange(len(groups))
     if len(set(groups)) < 4:
         return idx, idx[:0]
-    fit, val = next(GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=seed).split(idx, groups=groups))
+    splitter = GroupShuffleSplit(n_splits=1, test_size=VAL_SHARE, random_state=seed)
+    fit, val = next(splitter.split(idx, groups=groups))
     return fit, val
+
+
+def people(groups: np.ndarray) -> list[str]:
+    return sorted(set(groups.tolist()))
 
 
 # ---------- evaluation ----------
 
 
-def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> dict[str, object]:
+def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> tuple[dict[str, object], dict[str, np.ndarray]]:
+    """Returns the scores (for metrics.json) and the test-person predictions (cv_predictions.npz)."""
     X, y, groups, blocks = d["X"], d["y"], d["groups"], d["blocks"]
     n_folds = min(folds, len(set(groups)))
     splitter = StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=seed)
@@ -219,6 +268,9 @@ def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> dict[str,
     pooled = {name: np.zeros_like(y) for name in names}
     per_fold: dict[str, list[float]] = {name: [] for name in names}
     lstm_epochs = []
+    lstm_probs = np.zeros((len(y), len(STATES)), dtype=np.float32)
+    test_fold = np.zeros(len(y), dtype=np.int64)  # 1-based fold in which each example was a test example
+    fold_details = []
 
     for k, (train, test) in enumerate(splitter.split(X, y, groups)):
         fit_rel, val_rel = split_fit_val(groups[train], seed + k)
@@ -231,17 +283,33 @@ def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> dict[str,
         logreg = LogisticRegression(max_iter=3000, class_weight="balanced").fit(window_stats(Xs[train]), y[train])
         model, info = train_lstm(Xs[fit], y[fit], Xs[val], y[val], seed=seed + k)
         lstm_epochs.append(info["best_epoch"])
+        probs = lstm_probabilities(model, Xs[test])
 
         preds = {
             "majority": np.full(len(test), majority),
             "block": np.array([by_block.get(b, majority) for b in blocks[test]]),
             "logreg": logreg.predict(window_stats(Xs[test])),
-            "lstm": predict_lstm(model, Xs[test]),
+            "lstm": probs.argmax(axis=1),
         }
         for name in names:
             pooled[name][test] = preds[name]
             per_fold[name].append(macro_f1(y[test], preds[name]))
-        print(f"  fold {k + 1}/{n_folds}: LSTM macro-F1 {per_fold['lstm'][-1]:.3f} (stopped at epoch {info['best_epoch']})")
+        lstm_probs[test] = probs
+        test_fold[test] = k + 1
+        fold_details.append(
+            {
+                "fold": k + 1,
+                "fit_participants": people(groups[fit]),
+                "val_participants": people(groups[val]),
+                "test_participants": people(groups[test]),
+                "examples": {"fit": len(fit), "val": len(val), "test": len(test)},
+                "macro_f1": {name: round(per_fold[name][-1], 4) for name in names},
+                "best_epoch": info["best_epoch"],
+                "stopped_epoch": info["stopped_epoch"],
+                "history": info["history"],
+            }
+        )
+        print(f"  fold {k + 1}/{n_folds}: LSTM macro-F1 {per_fold['lstm'][-1]:.3f} (best epoch {info['best_epoch']})")
 
     results = {}
     for name in names:
@@ -253,7 +321,7 @@ def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> dict[str,
     precision, recall, f1, support = precision_recall_fscore_support(
         y, pooled["lstm"], labels=LABELS, zero_division=0
     )
-    return {
+    scores = {
         "folds": n_folds,
         "models": results,
         "lstm_confusion": confusion_matrix(y, pooled["lstm"], labels=LABELS).tolist(),
@@ -262,7 +330,10 @@ def cross_validate(d: dict[str, np.ndarray], seed: int, folds: int) -> dict[str,
             for i, state in enumerate(STATES)
         },
         "lstm_best_epochs": lstm_epochs,
+        "fold_details": fold_details,
     }
+    predictions = {"test_fold": test_fold, "lstm_probs": lstm_probs, **{f"pred_{name}": pooled[name] for name in names}}
+    return scores, predictions
 
 
 # ---------- report ----------
@@ -324,7 +395,8 @@ def write_report(path: Path, data: str, info: dict, cv: dict, final: dict) -> st
         "",
         f"Trained on {final['fit_participants']} participants, with {final['val_participants']} held out "
         f"for early stopping (best epoch {final['best_epoch']}, validation macro-F1 {final['val_macro_f1']:.3f}).",
-        "Files: `model.pt` (weights), `scaler.json` (preprocessing), `metrics.json`, `dataset.npz`.",
+        "Files: `model.pt` (weights), `scaler.json` (preprocessing), `metrics.json`, `dataset.npz`,",
+        "`cv_predictions.npz` (test-person predictions) and `report.html` (open it in a browser).",
         "",
     ]
     text = "\n".join(lines)
@@ -340,7 +412,7 @@ def main() -> None:
     parser.add_argument("--data", choices=["real", "synthetic"], default="real")
     parser.add_argument("--mongo-uri")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--folds", type=int, default=FOLDS)
     parser.add_argument("--out", type=Path, default=ROOT / "runs")
     args = parser.parse_args()
     seed_everything(args.seed)
@@ -357,7 +429,7 @@ def main() -> None:
         raise SystemExit(f"[train] not enough data to train: need ≥3 participants and every state present{hint}")
 
     print(f"[train] cross-validating ({args.folds} folds, by participant)…")
-    cv = cross_validate(data, args.seed, args.folds)
+    cv, cv_predictions = cross_validate(data, args.seed, args.folds)
 
     print("[train] training the final model on all participants…")
     fit, val = split_fit_val(data["groups"], args.seed)
@@ -370,18 +442,37 @@ def main() -> None:
     torch.save(model.state_dict(), run_dir / "model.pt")
     scaler.save(run_dir / "scaler.json", seq_len=SEQ_LEN, states=STATES, data=args.data)
     np.savez_compressed(run_dir / "dataset.npz", **data)
+    np.savez_compressed(run_dir / "cv_predictions.npz", **cv_predictions)
     final = {
         **final_info,
         "fit_participants": len(set(data["groups"][fit])),
         "val_participants": len(set(data["groups"][val])),
+        "fit_participant_ids": people(data["groups"][fit]),
+        "val_participant_ids": people(data["groups"][val]),
+        "examples": {"fit": len(fit), "val": len(val)},
+    }
+    settings = {
+        "seq_len": SEQ_LEN,
+        "folds": cv["folds"],
+        "val_share": VAL_SHARE,
+        "max_epochs": MAX_EPOCHS,
+        "patience": PATIENCE,
+        "batch_size": BATCH_SIZE,
+        "learning_rate": LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+        "short_seq_share": SHORT_SEQ_SHARE,
     }
     (run_dir / "metrics.json").write_text(
-        json.dumps({"data": args.data, "seed": args.seed, "dataset": info, "cross_validation": cv, "final": final}, indent=2)
+        json.dumps(
+            {"data": args.data, "seed": args.seed, "settings": settings, "dataset": info, "cross_validation": cv, "final": final},
+            indent=2,
+        )
         + "\n"
     )
     report = write_report(run_dir / "report.md", args.data, info, cv, final)
+    html = write_html(run_dir)
     print("\n" + report)
-    print(f"[train] saved to {run_dir.relative_to(ROOT)}/")
+    print(f"[train] saved to {run_dir.relative_to(ROOT)}/ — open {html.relative_to(ROOT)} in a browser")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training run report</title>
+<!-- Template for visualize.py: the placeholder in #report-data (below) is replaced by the run's JSON. -->
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f2f1ed;
+  --border: rgba(11, 11, 11, 0.10);
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #7a7873;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --st-engaged: #2a78d6;
+  --st-confused: #eb6834;
+  --st-bored: #1baf7a;
+  --st-frustrated: #eda100;
+  --role-fit: #6250d6;
+  --role-val: #e87ba4;
+  --role-test: #008300;
+  --bar-muted: #c3c2b7;
+  --bar-accent: #0b0b0b;
+  --div-neg: #2a78d6;
+  --div-mid: #f0efec;
+  --div-pos: #e34948;
+  --seq-lo: #edf3fc;
+  --seq-hi: #184f95;
+  --good: #006300;
+  --bad: #c13434;
+  --warn-bg: #fdf1d6;
+  --warn-ink: #5e4100;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --border: rgba(255, 255, 255, 0.10);
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #8f8d87;
+    --grid: #2c2c2a;
+    --axis: #44433f;
+    --st-engaged: #3987e5;
+    --st-confused: #d95926;
+    --st-bored: #199e70;
+    --st-frustrated: #c98500;
+    --role-fit: #9085e9;
+    --role-val: #d55181;
+    --role-test: #008300;
+    --bar-muted: #55544f;
+    --bar-accent: #f0efec;
+    --div-neg: #3987e5;
+    --div-mid: #383835;
+    --div-pos: #e66767;
+    --seq-lo: #1f2733;
+    --seq-hi: #86b6ef;
+    --good: #0ca30c;
+    --bad: #e66767;
+    --warn-bg: #3a2f14;
+    --warn-ink: #f3d48c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #242422;
+  --border: rgba(255, 255, 255, 0.10);
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d87;
+  --grid: #2c2c2a;
+  --axis: #44433f;
+  --st-engaged: #3987e5;
+  --st-confused: #d95926;
+  --st-bored: #199e70;
+  --st-frustrated: #c98500;
+  --role-fit: #9085e9;
+  --role-val: #d55181;
+  --role-test: #008300;
+  --bar-muted: #55544f;
+  --bar-accent: #f0efec;
+  --div-neg: #3987e5;
+  --div-mid: #383835;
+  --div-pos: #e66767;
+  --seq-lo: #1f2733;
+  --seq-hi: #86b6ef;
+  --good: #0ca30c;
+  --bad: #e66767;
+  --warn-bg: #3a2f14;
+  --warn-ink: #f3d48c;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1040px; margin: 0 auto; padding: 40px 16px 72px; }
+.eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 { font-size: 19px; line-height: 1.3; margin: 0 0 6px; }
+h3 { font-size: 15px; margin: 28px 0 6px; }
+p { margin: 0 0 10px; }
+.meta { color: var(--ink-2); font-size: 14px; }
+.banner { margin-top: 16px; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-top: 20px; }
+.lede { color: var(--ink-2); max-width: 74ch; }
+.small { font-size: 13px; }
+.muted { color: var(--muted); }
+.note { color: var(--ink-2); font-size: 14px; margin-top: 16px; max-width: 80ch; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+pre { background: var(--surface-2); padding: 14px 16px; border-radius: 10px; overflow-x: auto; margin: 0; }
+pre code { background: none; padding: 0; line-height: 1.6; }
+
+.steps { list-style: none; padding: 0; margin: 16px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; counter-reset: step; }
+.steps li { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; }
+.steps li::before { counter-increment: step; content: counter(step); display: inline-flex; width: 20px; height: 20px; border-radius: 50%; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 600; background: var(--ink); color: var(--surface); margin-bottom: 8px; }
+.step-title { font-weight: 600; font-size: 14px; }
+.step-value { font-size: 14px; }
+.step-note { font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+.tile { background: var(--surface-2); border-radius: 10px; padding: 14px 16px; }
+.tile-label { font-size: 13px; color: var(--ink-2); }
+.tile-value { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 4px; }
+.tile-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+.seg { display: flex; gap: 2px; height: 28px; margin: 8px 0 8px; }
+.seg > div { border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+.legend .item { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.lk { width: 16px; height: 2px; border-radius: 1px; display: inline-block; flex: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 12px; }
+button { font: inherit; color: inherit; }
+.tabs button, .chips button { font-size: 13.5px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); padding: 6px 13px; border-radius: 999px; cursor: pointer; }
+.tabs button:hover, .chips button:hover { background: var(--surface-2); }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+:focus-visible { outline: 2px solid var(--st-engaged); outline-offset: 2px; }
+
+.pgrid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 12px; }
+.pcell { width: 44px; height: 24px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; font-weight: 500; }
+
+.charts2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; margin-top: 8px; }
+figure { margin: 0; }
+figcaption { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.chart { margin-top: 6px; }
+.chart svg { display: block; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.marker { stroke: var(--ink-2); stroke-width: 1; }
+.marker-label { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
+.cross { stroke: var(--axis); stroke-width: 1; }
+.ring { stroke: var(--surface); stroke-width: 2; }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12.5px; }
+.num { text-align: right; }
+#fold-table tbody tr { cursor: pointer; }
+#settings-table td { white-space: normal; }
+#settings-table td:first-child { white-space: nowrap; }
+#fold-table tbody tr:hover td { background: var(--surface-2); }
+tr.sel td { background: var(--surface-2); font-weight: 600; }
+
+.mrow { display: grid; grid-template-columns: minmax(150px, 270px) minmax(0, 1fr); gap: 16px; align-items: center; padding: 9px 0; border-radius: 6px; }
+.mname { font-size: 14px; }
+.mrow.accent .mname { font-weight: 600; }
+.mtrack { position: relative; height: 24px; }
+.vgrid { position: absolute; top: -9px; bottom: -9px; width: 1px; background: var(--grid); }
+.vgrid.base { background: var(--axis); }
+.mbar { position: absolute; left: 0; top: 4px; height: 16px; border-radius: 0 4px 4px 0; background: var(--bar-muted); }
+.mrow.accent .mbar { background: var(--bar-accent); }
+.mrow:hover .mbar { filter: brightness(1.08); }
+.mval { position: absolute; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mval .sd { font-weight: 400; color: var(--muted); }
+.maxis { display: grid; grid-template-columns: minmax(150px, 270px) minmax(0, 1fr); gap: 16px; margin-top: 4px; }
+.maxis .ticks { position: relative; height: 16px; }
+.maxis .ticks span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.maxis .title { font-size: 12px; color: var(--muted); text-align: right; }
+
+.cm-wrap { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.cm-scroll { overflow-x: auto; min-width: 0; }
+.cm { min-width: 440px; display: grid; grid-template-columns: minmax(92px, 120px) repeat(4, minmax(0, 1fr)); gap: 2px; }
+.cm .hd { font-size: 12.5px; color: var(--ink-2); padding: 4px 6px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cm .corner { font-size: 11.5px; color: var(--muted); align-items: flex-end; }
+.cm .cell { border-radius: 4px; padding: 9px 6px; text-align: center; font-variant-numeric: tabular-nums; }
+.cm .cell strong { display: block; font-size: 15px; line-height: 1.2; }
+.cm .cell span { font-size: 11.5px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chips button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; font-size: 12.5px; }
+.chips button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.ok { color: var(--good); font-weight: 700; }
+.no { color: var(--bad); font-weight: 700; }
+.ex-head { margin-top: 18px; font-size: 14px; color: var(--ink-2); }
+.ex-head strong { color: var(--ink); }
+.ex-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 28px; margin-top: 12px; }
+.heat { display: grid; grid-template-columns: minmax(96px, 128px) repeat(12, minmax(0, 1fr)); gap: 2px; font-size: 12px; }
+.heat .rl { color: var(--ink-2); padding-right: 6px; white-space: nowrap; display: flex; align-items: center; }
+.heat .ch { color: var(--muted); text-align: center; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.heat .c { height: 20px; border-radius: 3px; }
+.heat .c:hover { outline: 2px solid var(--ink); outline-offset: -1px; }
+.heat .grp { grid-column: 1 / -1; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 6px; }
+.heat-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.scale { display: inline-flex; align-items: center; gap: 8px; }
+.scale .g { width: 120px; height: 8px; border-radius: 4px; }
+.prow { margin: 0 0 12px; }
+.prow-top { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.prow-top .v { margin-left: auto; font-variant-numeric: tabular-nums; }
+.prow.top .prow-top { font-weight: 600; }
+.ptrack { position: relative; height: 12px; margin-top: 4px; }
+.ptrack::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--axis); }
+.pbar { height: 12px; border-radius: 0 4px 4px 0; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-weight: 500; }
+.verdict { margin-top: 14px; font-size: 14px; font-weight: 600; }
+.verdict.good { color: var(--good); }
+.verdict.bad { color: var(--bad); }
+
+#tip { position: fixed; z-index: 10; pointer-events: none; display: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0, 0, 0, .12); max-width: 280px; }
+.tip-title { color: var(--ink-2); margin-bottom: 3px; }
+.tip-row { display: flex; align-items: center; gap: 7px; }
+.tip-row strong { font-variant-numeric: tabular-nums; }
+.tip-row .tl { color: var(--ink-2); }
+
+@media (max-width: 860px) {
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts2, .ex-grid, .cm-wrap { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  main { padding-top: 24px; }
+  h1 { font-size: 23px; }
+  .card { padding: 18px 16px; }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+  .tile-value { font-size: 24px; }
+  .mrow, .maxis { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .maxis .title { display: none; }
+  .heat { grid-template-columns: minmax(84px, 96px) repeat(12, minmax(0, 1fr)); font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Cognitive-state model · training run</p>
+    <h1>How the model was trained and tested</h1>
+    <p class="meta" id="meta"></p>
+    <div class="banner" id="synthetic-banner" hidden>
+      <strong>Synthetic data.</strong> These participants were generated by
+      <code>backend/scripts/seed-mock-pilot.ts</code>, so the scores describe the mock-data
+      generator, not real learners. This run only shows that the pipeline works end to end.
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>From check-ins to a model the app can use</h2>
+    <ol class="steps" id="steps"></ol>
+    <p class="note">
+      <code>npm run dev</code> never trains. It starts the services, and the ML service loads the run
+      that <code>MODEL_RUN</code> in <code>ml-service/.env</code> names, then only predicts.
+      Training is a separate command (<code>npm run train</code>). Each run writes a new folder
+      like this one, and the app keeps using the old model until <code>MODEL_RUN</code> points at the new one.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>The data</h2>
+    <p class="lede">
+      The labels come from the learners: the answer they picked in a check-in pop-up. The model has to guess
+      that answer from the camera and mouse features of the minute before the pop-up appeared.
+    </p>
+    <div class="tiles" id="tiles"></div>
+    <h3>What people answered in the check-ins</h3>
+    <div class="seg" id="label-bar" role="img"></div>
+    <div class="legend" id="label-legend"></div>
+  </section>
+
+  <section class="card">
+    <h2>Who trains and who tests</h2>
+    <p class="lede">
+      One person's check-ins look alike, so if the same person were in training and in test, the score would be
+      too good. The split is therefore made <strong>by person</strong>. In each fold, about a fifth of the people
+      are <em>test</em> people. Of the rest, <span id="val-share"></span> are <em>validation</em> people, used only to
+      decide when to stop training, and the model learns from the remaining <em>training</em> people.
+      Every person is a test person in exactly one fold.
+    </p>
+    <div class="tabs" id="fold-tabs" role="group" aria-label="Choose a fold"></div>
+    <p id="split-caption"></p>
+    <div class="legend" id="role-legend"></div>
+    <div class="pgrid" id="pgrid"></div>
+
+    <h3>Training curve: <span id="curve-title"></span></h3>
+    <p class="small muted" id="curve-caption"></p>
+    <div class="charts2">
+      <figure>
+        <figcaption>Macro-F1 after each epoch</figcaption>
+        <div class="legend" id="curve-legend"></div>
+        <div class="chart" id="f1-chart"></div>
+      </figure>
+      <figure>
+        <figcaption>Training loss after each epoch</figcaption>
+        <div class="legend"><span class="item muted">lower = better fit to the training people</span></div>
+        <div class="chart" id="loss-chart"></div>
+      </figure>
+    </div>
+
+    <h3>All folds</h3>
+    <p class="small muted">Click a row to show that fold above.</p>
+    <div class="table-wrap"><table id="fold-table"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>How well it does on people it never saw</h2>
+    <p class="lede">
+      Every check-in below was predicted by the model of the fold in which that person was a test person.
+      Macro-F1 averages the F1 score of the four states, so a rare state counts as much as a common one.
+      Each bar is the mean over the folds (± its spread across folds). Hover a bar for the single folds.
+    </p>
+    <div id="model-bars"></div>
+
+    <h3>Where the LSTM gets it right and wrong</h3>
+    <p class="small muted">Rows: what the person answered. Columns: what the model predicted. The shading shows the share of the row.</p>
+    <div class="cm-wrap">
+      <div class="cm-scroll"><div class="cm" id="confusion"></div></div>
+      <div class="table-wrap"><table id="per-class"></table>
+        <p class="small muted" style="margin-top:8px">
+          Recall: of the check-ins where people gave this answer, the share the model got right.
+          Precision: of the model's guesses of this state, the share that were right.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Look inside single check-ins</h2>
+    <p class="lede">
+      Pick a check-in. The grid is what the model reads: 13 features × 12 five-second windows, oldest on the left.
+      The colour shows each value compared with the average window (blue = lower, red = higher). Hover a cell for the raw value.
+      The model outputs four probabilities, and the highest one is its prediction.
+    </p>
+    <div class="chips" id="chips" role="group" aria-label="Choose a check-in"></div>
+    <div id="example"></div>
+  </section>
+
+  <section class="card">
+    <h2>Where this is decided</h2>
+    <p class="lede">All of these are set at the top of <code>ml-service/train.py</code> or on its command line.</p>
+    <div class="table-wrap"><table id="settings-table"></table></div>
+    <h3>Run it again</h3>
+    <pre><code>npm run train -- --data synthetic   # the mock participants (pipeline check)
+npm run train                       # real participants (P-codes), the default
+
+# to use a new run in the app, in ml-service/.env:
+MODEL_RUN=runs/&lt;new folder&gt;</code></pre>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script type="application/json" id="report-data">__REPORT_DATA__</script>
+<script>
+(() => {
+  "use strict";
+  const D = JSON.parse(document.getElementById("report-data").textContent);
+  const STATES = D.states;
+  const MODELS = ["majority", "block", "logreg", "lstm"];
+  const MODEL_NAMES = {
+    majority: "Always the most common state",
+    block: "Most common state for that part of the session",
+    logreg: "Logistic regression on the minute's averages",
+    lstm: "LSTM on the 12-window sequence",
+  };
+  const FEATURES = {
+    facePresence: ["Face visible", "share of frames"],
+    avgEyeOpenness: ["Eye openness", "0 closed – 1 open"],
+    blinkRate: ["Blink rate", "blinks per second"],
+    gazeDispersion: ["Gaze spread", "std of iris position"],
+    gazeLeftX: ["Left iris x", "−1 … 1"],
+    gazeLeftY: ["Left iris y", "−1 … 1"],
+    gazeRightX: ["Right iris x", "−1 … 1"],
+    gazeRightY: ["Right iris y", "−1 … 1"],
+    headMovement: ["Head movement", "nose travel, image units"],
+    mouseTravel: ["Mouse distance", "pixels"],
+    mouseSpeedMean: ["Mouse speed", "pixels per second"],
+    clickCount: ["Clicks", "clicks in the window"],
+    idleRatio: ["Mouse idle", "share of the window"],
+  };
+  const MOUSE_FEATURES = new Set(["mouseTravel", "mouseSpeedMean", "clickCount", "idleRatio"]);
+  const ROLES = {
+    fit: { name: "Training", css: "--role-fit", what: "the model learns from them" },
+    val: { name: "Validation", css: "--role-val", what: "only decide when to stop" },
+    test: { name: "Test", css: "--role-test", what: "never seen, used for the score" },
+  };
+  const BLOCKS = { routine: "routine", practice: "practice", puzzles: "puzzles", challenge: "challenge", warmup: "warm-up", "between-parts": "between parts" };
+
+  const nf = new Intl.NumberFormat("en-US");
+  const pct = (x, d = 0) => (x * 100).toFixed(d) + "%";
+  const $ = (id) => document.getElementById(id);
+  const stCss = (s) => `--st-${s}`;
+
+  // ---------- DOM helpers (all text goes in via textContent) ----------
+  function h(tag, props = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k === "style") Object.assign(e.style, v);
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of kids.flat()) if (c != null && c !== false) e.append(c);
+    return e;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs = {}, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const swatch = (css, cls = "sw") => h("span", { class: cls, style: { background: `var(${css})` } });
+
+  // ---------- colour helpers ----------
+  const tok = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const rgb = (hex) => { const v = hex.replace("#", ""); return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16)); };
+  const mix = (a, b, t) => { const A = rgb(a), B = rgb(b); return A.map((x, i) => Math.round(x + (B[i] - x) * t)); };
+  const cssRgb = (c) => `rgb(${c.join(",")})`;
+  function luminance(c) {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const [r, g, b] = c.map(f);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  const inkOn = (c) => (luminance(c) > 0.3 ? "#0b0b0b" : "#ffffff");
+
+  // ---------- tooltip ----------
+  const tip = $("tip");
+  function showTip(ev, title, rows) {
+    tip.replaceChildren();
+    if (title) tip.append(h("div", { class: "tip-title", text: title }));
+    for (const r of rows) {
+      tip.append(h("div", { class: "tip-row" },
+        r.css ? swatch(r.css, r.line ? "lk" : "sw") : null,
+        h("strong", { text: r.value }),
+        r.label ? h("span", { class: "tl", text: r.label }) : null));
+    }
+    tip.style.display = "block";
+    moveTip(ev);
+  }
+  function moveTip(ev) {
+    const pad = 14, b = tip.getBoundingClientRect();
+    let x = ev.clientX + pad, y = ev.clientY + pad;
+    if (x + b.width > innerWidth - 8) x = ev.clientX - b.width - pad;
+    if (y + b.height > innerHeight - 8) y = ev.clientY - b.height - pad;
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  }
+  const hideTip = () => { tip.style.display = "none"; };
+  function hover(node, content, focusable = false) {
+    node.addEventListener("pointerenter", (ev) => showTip(ev, ...content()));
+    node.addEventListener("pointermove", moveTip);
+    node.addEventListener("pointerleave", hideTip);
+    if (focusable) {
+      node.tabIndex = 0;
+      node.addEventListener("focus", () => { const b = node.getBoundingClientRect(); showTip({ clientX: b.left + 20, clientY: b.bottom }, ...content()); });
+      node.addEventListener("blur", hideTip);
+    }
+  }
+
+  // ---------- header + pipeline ----------
+  const ds = D.dataset;
+  const skippedTotal = Object.values(ds.skipped).reduce((a, b) => a + b, 0);
+  $("meta").textContent = `Run ${D.run} · ${D.data} data · seed ${D.seed}`;
+  if (D.data === "synthetic") $("synthetic-banner").hidden = false;
+  $("val-share").textContent = pct(D.settings.val_share);
+
+  function renderSteps() {
+    const skipped = Object.entries(ds.skipped).map(([why, n]) => `${nf.format(n)} left out (${why})`).join("; ");
+    const steps = [
+      ["Check-ins in MongoDB", `${nf.format(ds.examples + skippedTotal)} answers from ${ds.participants_found} people`,
+        "About every 90 s the /collect page asks the learner how they feel."],
+      ["Examples", `${nf.format(ds.examples)} kept`,
+        `Each one is the ${D.settings.seq_len} five-second windows (1 minute × 13 features) before a check-in.${skipped ? " " + skipped + "." : ""}`],
+      ["Cross-validation", `${D.cv.folds} folds, split by person`,
+        "This gives the scores. Each check-in is predicted by a model that never saw that person."],
+      ["Final model", `trained on all ${ds.participants_used} people`,
+        "The same recipe run one last time, saved as model.pt + scaler.json."],
+      ["The app", "loads it via MODEL_RUN",
+        "At start-up the ML service loads the saved model, then only predicts."],
+    ];
+    $("steps").replaceChildren(...steps.map(([t, v, n]) =>
+      h("li", {}, h("div", { class: "step-title", text: t }), h("div", { class: "step-value", text: v }), h("div", { class: "step-note", text: n }))));
+  }
+
+  // ---------- the data ----------
+  function renderData() {
+    const lstm = D.cv.models.lstm;
+    const best = ["majority", "block", "logreg"].reduce((a, b) => (D.cv.models[b].macro_f1_mean > D.cv.models[a].macro_f1_mean ? b : a));
+    const tiles = [
+      ["People", nf.format(ds.participants_used), D.data === "synthetic" ? "mock participants" : "participants"],
+      ["Check-ins used", nf.format(ds.examples), "one example each"],
+      ["LSTM macro-F1, unseen people", lstm.macro_f1_mean.toFixed(2), `± ${lstm.macro_f1_sd.toFixed(2)} across folds · accuracy ${pct(lstm.accuracy)}`],
+      ["Best simple baseline", D.cv.models[best].macro_f1_mean.toFixed(2), MODEL_NAMES[best].toLowerCase()],
+    ];
+    $("tiles").replaceChildren(...tiles.map(([l, v, s]) =>
+      h("div", { class: "tile" }, h("div", { class: "tile-label", text: l }), h("div", { class: "tile-value", text: v }), h("div", { class: "tile-sub", text: s }))));
+
+    const total = STATES.reduce((a, s) => a + ds.labels[s], 0);
+    const bar = $("label-bar");
+    bar.setAttribute("aria-label", STATES.map((s) => `${s} ${ds.labels[s]}`).join(", "));
+    bar.replaceChildren(...STATES.filter((s) => ds.labels[s] > 0).map((s) => {
+      const share = ds.labels[s] / total;
+      const fill = tok(stCss(s));
+      const block = h("div", { style: { flex: `${share} 1 0`, background: fill, color: inkOn(rgb(fill)) } }, share >= 0.08 ? pct(share) : null);
+      hover(block, () => [s, [{ css: stCss(s), value: `${nf.format(ds.labels[s])} check-ins`, label: pct(share, 1) }]], true);
+      return block;
+    }));
+    $("label-legend").replaceChildren(...STATES.map((s) => h("span", { class: "item" }, swatch(stCss(s)), s)));
+  }
+
+  // ---------- split + curves ----------
+  let fold = 1; // 1..k, or 0 for the final model
+  const foldSets = D.cv.fold_details.map((f) => ({ val: new Set(f.val_participants), test: new Set(f.test_participants) }));
+  const finalVal = new Set(D.final.val_participant_ids);
+  const roleOf = (pid) => {
+    if (fold === 0) return finalVal.has(pid) ? "val" : "fit";
+    const f = foldSets[fold - 1];
+    return f.test.has(pid) ? "test" : f.val.has(pid) ? "val" : "fit";
+  };
+  const current = () => (fold === 0 ? D.final : D.cv.fold_details[fold - 1]);
+
+  function renderTabs() {
+    const tabs = [...D.cv.fold_details.map((f) => [f.fold, `Fold ${f.fold}`]), [0, "Final model"]];
+    $("fold-tabs").replaceChildren(...tabs.map(([k, label]) =>
+      h("button", { type: "button", "aria-pressed": String(k === fold), text: label, onclick: () => { fold = k; renderSplit(); } })));
+  }
+
+  function renderSplit() {
+    renderTabs();
+    const c = current();
+    const counts = { fit: 0, val: 0, test: 0 };
+    D.participants.forEach((p) => counts[roleOf(p.id)]++);
+    const ex = c.examples;
+    const caption = fold === 0
+      ? `Final model: it learns from ${counts.fit} people (${nf.format(ex.fit)} check-ins), and ${counts.val} people (${nf.format(ex.val)}) decide when to stop. Nobody is held out for testing, because the folds already measured how well this recipe does on new people. This is the model the app loads.`
+      : `Fold ${fold}: the model learns from ${counts.fit} people (${nf.format(ex.fit)} check-ins), ${counts.val} people (${nf.format(ex.val)}) only decide when to stop, and it is then scored on ${counts.test} people (${nf.format(ex.test)} check-ins) it has never seen.`;
+    $("split-caption").textContent = caption;
+
+    const roles = fold === 0 ? ["fit", "val"] : ["fit", "val", "test"];
+    $("role-legend").replaceChildren(...roles.map((r) =>
+      h("span", { class: "item" }, swatch(ROLES[r].css), h("strong", { text: ROLES[r].name }), `${counts[r]} people · ${ROLES[r].what}`)));
+
+    const fills = { fit: tok("--role-fit"), val: tok("--role-val"), test: tok("--role-test") };
+    $("pgrid").replaceChildren(...D.participants.map((p) => {
+      const r = roleOf(p.id);
+      const cell = h("div", { class: "pcell", style: { background: fills[r], color: inkOn(rgb(fills[r])) }, text: p.id });
+      hover(cell, () => [p.id, [
+        { css: ROLES[r].css, value: ROLES[r].name, label: fold === 0 ? "in the final model" : `in fold ${fold}` },
+        { value: nf.format(p.examples), label: "check-ins" },
+        { value: `fold ${p.test_fold}`, label: "is where this person is a test person" },
+      ]]);
+      return cell;
+    }));
+
+    renderCurves();
+    renderFoldTable();
+  }
+
+  function renderCurves() {
+    const c = current();
+    const hist = c.history;
+    const best = c.best_epoch, stopped = c.stopped_epoch;
+    const bestVal = hist[best - 1] && hist[best - 1].val_f1;
+    $("curve-title").textContent = fold === 0 ? "final model" : `fold ${fold}`;
+    const early = stopped < D.settings.max_epochs;
+    $("curve-caption").textContent =
+      `One epoch is one pass over the training check-ins. The model is kept from epoch ${best}` +
+      (bestVal != null ? `, where the validation people scored best (macro-F1 ${bestVal.toFixed(3)})` : "") +
+      (early ? `. Training stopped at epoch ${stopped} after ${D.settings.patience} epochs without improvement.` : `. It ran all ${stopped} epochs.`);
+    $("curve-legend").replaceChildren(
+      h("span", { class: "item" }, swatch("--role-fit", "lk"), "Training people"),
+      h("span", { class: "item" }, swatch("--role-val", "lk"), "Validation people"));
+    lineChart($("f1-chart"), {
+      label: "Macro-F1 per epoch for training and validation people",
+      series: [
+        { name: "Training people", css: "--role-fit", values: hist.map((e) => e.train_f1) },
+        { name: "Validation people", css: "--role-val", values: hist.map((e) => e.val_f1) },
+      ],
+      yMax: 1, yTicks: [0, 0.25, 0.5, 0.75, 1], yFmt: (v) => v.toFixed(2), marker: best, markerSeries: 1,
+    });
+    const maxLoss = Math.max(...hist.map((e) => e.train_loss));
+    const tickStep = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find((st) => maxLoss / st <= 5) || 10;
+    const top = Math.ceil(maxLoss / tickStep) * tickStep;
+    const ticks = [];
+    for (let i = 0; i * tickStep <= top + 1e-9; i++) ticks.push(+(i * tickStep).toFixed(3));
+    lineChart($("loss-chart"), {
+      label: "Training loss per epoch",
+      series: [{ name: "Training loss", css: "--role-fit", values: hist.map((e) => e.train_loss) }],
+      yMax: top, yTicks: ticks, yFmt: (v) => v.toFixed(2), marker: best, markerSeries: 0,
+    });
+  }
+
+  function lineChart(host, cfg) {
+    host.replaceChildren();
+    const W = Math.max(260, host.clientWidth), H = 210, m = { l: 36, r: 14, t: 18, b: 28 };
+    const n = cfg.series[0].values.length, xMax = Math.max(2, n);
+    const X = (e) => m.l + ((e - 1) / (xMax - 1)) * (W - m.l - m.r);
+    const Y = (v) => m.t + (1 - v / cfg.yMax) * (H - m.t - m.b);
+    const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": cfg.label });
+    for (const t of cfg.yTicks) {
+      svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), class: t === 0 ? "axis" : "grid" }));
+      svg.append(sv("text", { x: m.l - 7, y: Y(t) + 4, "text-anchor": "end", class: "tick" }, cfg.yFmt(t)));
+    }
+    const step = xMax > 60 ? 20 : xMax > 24 ? 10 : 5;
+    const xt = [1];
+    for (let e = step; e <= xMax; e += step) xt.push(e);
+    for (const e of xt) svg.append(sv("text", { x: X(e), y: H - m.b + 16, "text-anchor": "middle", class: "tick" }, String(e)));
+    svg.append(sv("text", { x: W - m.r, y: H - 1, "text-anchor": "end", class: "tick" }, "epoch"));
+
+    if (cfg.marker) {
+      const mx = X(cfg.marker);
+      svg.append(sv("line", { x1: mx, x2: mx, y1: m.t - 4, y2: H - m.b, class: "marker" }));
+      const right = mx > W * 0.7;
+      svg.append(sv("text", { x: mx + (right ? -5 : 5), y: m.t - 6, "text-anchor": right ? "end" : "start", class: "marker-label" }, `kept: epoch ${cfg.marker}`));
+    }
+    cfg.series.forEach((ser) => {
+      let d = "";
+      ser.values.forEach((v, i) => { if (v != null) d += (d ? "L" : "M") + X(i + 1).toFixed(1) + " " + Y(v).toFixed(1); });
+      if (!d) return;
+      const path = sv("path", { d, class: "line" });
+      path.style.stroke = `var(${ser.css})`;
+      svg.append(path);
+    });
+    if (cfg.marker) {
+      const ser = cfg.series[cfg.markerSeries];
+      const v = ser && ser.values[cfg.marker - 1];
+      if (v != null) {
+        const dot = sv("circle", { cx: X(cfg.marker), cy: Y(v), r: 4.5, class: "ring" });
+        dot.style.fill = `var(${ser.css})`;
+        svg.append(dot);
+      }
+    }
+    const cross = sv("line", { y1: m.t, y2: H - m.b, class: "cross", visibility: "hidden" });
+    svg.append(cross);
+    const dots = cfg.series.map((ser) => {
+      const c = sv("circle", { r: 4, class: "ring", visibility: "hidden" });
+      c.style.fill = `var(${ser.css})`;
+      svg.append(c);
+      return c;
+    });
+    const hit = sv("rect", { x: m.l - 6, y: 0, width: W - m.l - m.r + 12, height: H - m.b, fill: "transparent" });
+    svg.append(hit);
+    const hideAll = () => { hideTip(); cross.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); };
+    hit.addEventListener("pointermove", (ev) => {
+      const b = svg.getBoundingClientRect();
+      const e = Math.min(n, Math.max(1, Math.round(((ev.clientX - b.left - m.l) / (W - m.l - m.r)) * (xMax - 1)) + 1));
+      cross.setAttribute("x1", X(e)); cross.setAttribute("x2", X(e)); cross.setAttribute("visibility", "visible");
+      const rows = [];
+      cfg.series.forEach((ser, i) => {
+        const v = ser.values[e - 1];
+        if (v == null) { dots[i].setAttribute("visibility", "hidden"); return; }
+        dots[i].setAttribute("cx", X(e)); dots[i].setAttribute("cy", Y(v)); dots[i].setAttribute("visibility", "visible");
+        rows.push({ css: ser.css, line: true, value: v.toFixed(3), label: ser.name });
+      });
+      showTip(ev, `Epoch ${e}${e === cfg.marker ? " · the kept model" : ""}`, rows);
+    });
+    hit.addEventListener("pointerleave", hideAll);
+    host.append(svg);
+  }
+
+  function renderFoldTable() {
+    const head = h("thead", {}, h("tr", {},
+      h("th", { text: "" }),
+      h("th", { class: "num", text: "Training people" }), h("th", { class: "num", text: "check-ins" }),
+      h("th", { class: "num", text: "Validation people" }), h("th", { class: "num", text: "check-ins" }),
+      h("th", { class: "num", text: "Test people" }), h("th", { class: "num", text: "check-ins" }),
+      h("th", { class: "num", text: "Kept epoch" }), h("th", { class: "num", text: "LSTM macro-F1 (test)" })));
+    const rows = D.cv.fold_details.map((f) =>
+      h("tr", { class: f.fold === fold ? "sel" : null, onclick: () => { fold = f.fold; renderSplit(); } },
+        h("td", { text: `Fold ${f.fold}` }),
+        h("td", { class: "num", text: f.fit_participants.length }), h("td", { class: "num", text: nf.format(f.examples.fit) }),
+        h("td", { class: "num", text: f.val_participants.length }), h("td", { class: "num", text: nf.format(f.examples.val) }),
+        h("td", { class: "num", text: f.test_participants.length }), h("td", { class: "num", text: nf.format(f.examples.test) }),
+        h("td", { class: "num", text: f.best_epoch }), h("td", { class: "num", text: f.macro_f1.lstm.toFixed(3) })));
+    const fin = D.final;
+    rows.push(h("tr", { class: fold === 0 ? "sel" : null, onclick: () => { fold = 0; renderSplit(); } },
+      h("td", { text: "Final model" }),
+      h("td", { class: "num", text: fin.fit_participants }), h("td", { class: "num", text: nf.format(fin.examples.fit) }),
+      h("td", { class: "num", text: fin.val_participants }), h("td", { class: "num", text: nf.format(fin.examples.val) }),
+      h("td", { class: "num", text: "—" }), h("td", { class: "num", text: "—" }),
+      h("td", { class: "num", text: fin.best_epoch }), h("td", { class: "num muted", text: "no test people" })));
+    $("fold-table").replaceChildren(head, h("tbody", {}, rows));
+  }
+
+  // ---------- results ----------
+  function renderModels() {
+    const ticks = [0, 0.25, 0.5, 0.75, 1];
+    const rows = MODELS.map((name) => {
+      const r = D.cv.models[name];
+      const perFold = D.cv.fold_details.map((f) => f.macro_f1[name]);
+      const track = h("div", { class: "mtrack" },
+        ticks.map((t) => h("div", { class: "vgrid" + (t === 0 ? " base" : ""), style: { left: t * 100 + "%" } })),
+        h("div", { class: "mbar", style: { width: r.macro_f1_mean * 100 + "%" } }),
+        h("div", { class: "mval", style: { left: `calc(${Math.min(0.86, r.macro_f1_mean) * 100}% + 10px)` } },
+          r.macro_f1_mean.toFixed(2), h("span", { class: "sd", text: ` ± ${r.macro_f1_sd.toFixed(2)}` })));
+      const row = h("div", { class: "mrow" + (name === "lstm" ? " accent" : "") },
+        h("div", {}, h("div", { class: "mname", text: MODEL_NAMES[name] }), h("div", { class: "small muted", text: `accuracy ${pct(r.accuracy, 1)}` })),
+        track);
+      hover(row, () => [MODEL_NAMES[name], [
+        { value: `${r.macro_f1_mean.toFixed(3)} ± ${r.macro_f1_sd.toFixed(3)}`, label: "macro-F1 (mean ± sd)" },
+        { value: pct(r.accuracy, 1), label: "accuracy" },
+        { value: perFold.map((v) => v.toFixed(2)).join(" · "), label: "per fold" },
+      ]], true);
+      return row;
+    });
+    const axis = h("div", { class: "maxis" }, h("div", { class: "title", text: "macro-F1 →" }),
+      h("div", { class: "ticks" }, ticks.map((t) => h("span", { style: { left: t * 100 + "%" }, text: t.toFixed(2) }))));
+    $("model-bars").replaceChildren(...rows, axis);
+  }
+
+  function renderConfusion() {
+    const cm = D.cv.lstm_confusion;
+    const lo = tok("--seq-lo"), hi = tok("--seq-hi");
+    const host = $("confusion");
+    const kids = [h("div", { class: "hd corner", text: "answered ↓ · predicted →" })];
+    STATES.forEach((s) => kids.push(h("div", { class: "hd" }, swatch(stCss(s)), s)));
+    cm.forEach((row, i) => {
+      const total = row.reduce((a, b) => a + b, 0) || 1;
+      kids.push(h("div", { class: "hd" }, swatch(stCss(STATES[i])), STATES[i]));
+      row.forEach((count, j) => {
+        const share = count / total;
+        const c = mix(lo, hi, Math.min(1, share / 0.75));
+        const cell = h("div", { class: "cell", style: { background: cssRgb(c), color: inkOn(c) } },
+          h("strong", { text: nf.format(count) }), h("span", { text: pct(share) }));
+        hover(cell, () => [`answered ${STATES[i]} → predicted ${STATES[j]}`, [
+          { value: nf.format(count), label: `of ${nf.format(total)} "${STATES[i]}" check-ins` },
+          { value: pct(share, 1), label: i === j ? "right (recall)" : "mistaken for this state" },
+        ]]);
+        kids.push(cell);
+      });
+    });
+    host.replaceChildren(...kids);
+
+    const pc = D.cv.lstm_per_class;
+    $("per-class").replaceChildren(
+      h("thead", {}, h("tr", {}, h("th", { text: "State" }), h("th", { class: "num", text: "Recall" }), h("th", { class: "num", text: "Precision" }), h("th", { class: "num", text: "F1" }), h("th", { class: "num", text: "Check-ins" }))),
+      h("tbody", {}, STATES.map((s) => h("tr", {},
+        h("td", {}, h("span", { class: "legend", style: { margin: 0 } }, h("span", { class: "item" }, swatch(stCss(s)), s))),
+        h("td", { class: "num", text: pct(pc[s].recall) }), h("td", { class: "num", text: pct(pc[s].precision) }),
+        h("td", { class: "num", text: pc[s].f1.toFixed(2) }), h("td", { class: "num", text: nf.format(pc[s].n) })))));
+  }
+
+  // ---------- single check-ins ----------
+  let exIndex = 0;
+  function renderChips() {
+    $("chips").replaceChildren(...D.examples.map((e, i) => {
+      const right = e.said === e.predicted;
+      return h("button", { type: "button", "aria-pressed": String(i === exIndex), onclick: () => { exIndex = i; renderChips(); renderExample(); } },
+        swatch(stCss(e.said), "dot"), `${e.participant}: ${e.said} → ${e.predicted}`,
+        h("span", { class: right ? "ok" : "no", text: right ? "✓" : "✗", "aria-label": right ? "right" : "wrong" }));
+    }));
+  }
+
+  function fmtRaw(name, v) {
+    if (name === "clickCount") return String(Math.round(v * 1000) / 1000);
+    if (name === "mouseTravel" || name === "mouseSpeedMean") return nf.format(Math.round(v));
+    return v.toFixed(3);
+  }
+
+  function renderExample() {
+    const e = D.examples[exIndex];
+    if (!e) { $("example").replaceChildren(h("p", { class: "muted", text: "No check-ins in this run." })); return; }
+    const neg = tok("--div-neg"), mid = tok("--div-mid"), pos = tok("--div-pos");
+    const colour = (z) => {
+      const t = Math.max(-1, Math.min(1, z / 2.5));
+      return cssRgb(t < 0 ? mix(mid, neg, -t) : mix(mid, pos, t));
+    };
+    const heat = [h("div", {}), ...Array.from({ length: e.raw.length }, (_, w) => h("div", { class: "ch", text: String(w + 1) }))];
+    let group = null;
+    D.features.forEach((name, f) => {
+      const g = MOUSE_FEATURES.has(name) ? "Mouse" : "Camera";
+      if (g !== group) { heat.push(h("div", { class: "grp", text: g })); group = g; }
+      const [label, unit] = FEATURES[name] || [name, ""];
+      heat.push(h("div", { class: "rl", text: label, title: name }));
+      e.raw.forEach((row, w) => {
+        const z = e.z[w][f];
+        const cell = h("div", { class: "c", style: { background: colour(z) } });
+        hover(cell, () => [`${label} · window ${w + 1} of ${e.raw.length}`, [
+          { value: fmtRaw(name, row[f]), label: unit },
+          { value: `${z >= 0 ? "+" : "−"}${Math.abs(z).toFixed(1)} sd`, label: "vs. the average window" },
+        ]]);
+        heat.push(cell);
+      });
+    });
+
+    const top = e.probs.indexOf(Math.max(...e.probs));
+    const probs = STATES.map((s, i) => {
+      const fill = tok(stCss(s));
+      return h("div", { class: "prow" + (i === top ? " top" : "") },
+        h("div", { class: "prow-top" }, swatch(stCss(s)), s,
+          i === top ? h("span", { class: "tag", text: "model's pick" }) : null,
+          s === e.said ? h("span", { class: "tag", text: "person answered" }) : null,
+          h("span", { class: "v", text: pct(e.probs[i], 1) })),
+        h("div", { class: "ptrack" }, h("div", { class: "pbar", style: { width: Math.max(0.4, e.probs[i] * 100) + "%", background: fill } })));
+    });
+    const right = e.said === e.predicted;
+    $("example").replaceChildren(
+      h("p", { class: "ex-head" },
+        h("strong", { text: `Check-in #${e.n} · ${e.participant}` }),
+        ` · ${BLOCKS[e.block] || e.block} part of the session · ${e.participant} is a test person in fold ${e.fold}, so the model that made this guess never saw any of their check-ins.`),
+      h("div", { class: "ex-grid" },
+        h("div", {},
+          h("div", { class: "heat", role: "img", "aria-label": `Feature grid of check-in ${e.n}` }, heat),
+          h("div", { class: "heat-foot" },
+            h("span", { text: "window 1 = a minute before · window 12 = just before the pop-up" }),
+            h("span", { class: "scale" }, "lower",
+              h("span", { class: "g", style: { background: `linear-gradient(90deg, ${neg}, ${mid}, ${pos})` } }), "higher"))),
+        h("div", {},
+          h("figcaption", { text: "What the model outputs", style: { marginBottom: "10px" } }),
+          probs,
+          h("div", { class: "verdict " + (right ? "good" : "bad"), text: right
+            ? `✓ Right. The highest probability is ${e.predicted}, which is what the person answered.`
+            : `✗ Wrong. The highest probability is ${e.predicted}, but the person answered ${e.said}.` }))));
+  }
+
+  // ---------- settings ----------
+  function renderSettings() {
+    const s = D.settings;
+    const rows = [
+      ["Windows per example", `${s.seq_len} (1 minute)`, "SEQ_LEN (must match backend/src/store.ts)"],
+      ["Folds", String(s.folds), "FOLDS, or --folds"],
+      ["How people are split", "by person, with the four states balanced across folds", "StratifiedGroupKFold in cross_validate()"],
+      ["Validation people", `${pct(s.val_share)} of the training people`, "VAL_SHARE (GroupShuffleSplit in split_fit_val())"],
+      ["Max epochs", String(s.max_epochs), "MAX_EPOCHS"],
+      ["Stop after no improvement for", `${s.patience} epochs`, "PATIENCE"],
+      ["Batch size", String(s.batch_size), "BATCH_SIZE"],
+      ["Optimizer", `Adam, learning rate ${s.learning_rate}, weight decay ${s.weight_decay}`, "LEARNING_RATE, WEIGHT_DECAY"],
+      ["Loss", "cross-entropy, rarer states weighted up", "train_lstm()"],
+      ["Batches cut to 1–11 windows", pct(s.short_seq_share), "SHORT_SEQ_SHARE (the app's first minute has < 12)"],
+      ["Feature scaling", "log1p on mouse distance, speed and clicks, then z-score", "preprocess.py, saved as scaler.json"],
+      ["Which answers count", "engaged, confused, bored, frustrated ('neutral' left out)", "load_examples()"],
+      ["Which people", D.data === "synthetic" ? "synthetic (mock) participants" : "real participants (no mock data, no test runs)", "--data synthetic | real"],
+      ["Random seed", String(D.seed), "--seed (same seed → same model)"],
+    ];
+    $("settings-table").replaceChildren(
+      h("thead", {}, h("tr", {}, h("th", { text: "Setting" }), h("th", { text: "This run" }), h("th", { text: "Where in train.py" }))),
+      h("tbody", {}, rows.map(([a, b, c]) => h("tr", {}, h("td", { text: a }), h("td", { text: b }), h("td", {}, h("code", { text: c }))))));
+  }
+
+  function renderAll() {
+    renderSteps();
+    renderData();
+    renderSplit();
+    renderModels();
+    renderConfusion();
+    renderChips();
+    renderExample();
+    renderSettings();
+  }
+  renderAll();
+
+  let resizeTimer;
+  let lastWidth = innerWidth;
+  addEventListener("resize", () => {
+    if (innerWidth === lastWidth) return;
+    lastWidth = innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderCurves, 120);
+  });
+  const dark = matchMedia("(prefers-color-scheme: dark)");
+  if (dark.addEventListener) dark.addEventListener("change", renderAll);
+  new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
+</body>
+</html>

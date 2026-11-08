@@ -235,7 +235,10 @@ The end-to-end flow works before anything real is plugged in:
 
 ## Training the model
 
-`ml-service/train.py` trains `CognitiveStateLSTM` on the `/collect` check-ins:
+`ml-service/train.py` trains `CognitiveStateLSTM` on the `/collect` check-ins.
+It is a separate command, run when there is new data: `npm run dev` never trains,
+it only loads the run named by `MODEL_RUN` (below). A run takes about 30 s on the
+synthetic data.
 
 ```bash
 npm run train -- --data synthetic   # generated test participants: pipeline check only
@@ -250,12 +253,24 @@ npm run train                       # real participants (P-codes): the default
 - **Training:** Adam with class-weighted cross-entropy. Training stops early on
   the macro-F1 of held-out participants.
 - **Evaluation:** 5-fold cross-validation split by participant, so every score
-  comes from people the model never saw. It is compared with three baselines:
-  always guessing the most common state, guessing from the session part, and
-  logistic regression on the minute's averages.
+  comes from people the model never saw. In each fold about a fifth of the people
+  are test people; 15% of the rest are validation people (only used to decide when
+  to stop) and the model learns from the remaining ones. It is compared with three
+  baselines: always guessing the most common state, guessing from the session
+  part, and logistic regression on the minute's averages.
+- **Final model:** the same recipe on all participants (15% of them as
+  validation people, nobody held out for testing). This is the model the app loads.
+- **Settings:** folds, validation share, epochs, patience, batch size and
+  learning rate are constants at the top of `train.py`.
 - **Output:** `ml-service/runs/<time>-<data>/` with `model.pt`, `scaler.json`,
-  `metrics.json`, `report.md` and `dataset.npz`. The same seed gives the same
-  results.
+  `metrics.json`, `report.md`, `dataset.npz`, `cv_predictions.npz` and
+  `report.html`. The same seed gives the same results.
+- **Report page:** `report.html` is a self-contained page (opens offline) that
+  shows the run visually: the data, who trains / validates / tests in each fold,
+  the training curves, the scores against the baselines, the confusion matrix and
+  single check-ins with the model's four probabilities. It is built by
+  `ml-service/visualize.py` from `ml-service/report_template.html`; to rebuild it
+  for a run: `cd ml-service && .venv/bin/python visualize.py runs/<run>`.
 
 ### Using a trained model in the app
 
@@ -265,7 +280,7 @@ The ML service runs the model set by `MODEL_RUN`, a run directory from
 
 ```bash
 # ml-service/.env
-MODEL_RUN=runs/20261107-182554-synthetic
+MODEL_RUN=runs/20261108-132029-synthetic
 ```
 
 - **Restart needed:** restart the service after changing it (`--reload` only watches `.py` files).
