@@ -78,6 +78,7 @@ export const PROBLEM_EVENT_TYPES = [
   "nudge", // the accepted check-in's help arrived
   "solved",
   "skipped",
+  "unfinished", // /study: the tutoring ended (time limit or "End session") while this problem was open
 ] as const;
 
 const ProblemEventSchema = new Schema({

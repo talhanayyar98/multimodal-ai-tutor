@@ -235,7 +235,7 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 | `GET /api/hint/:sessionId`    | ML state + Gemini hint → `{ hint, state, abGroup }` (`?problem=…`)                          |
 | `POST /api/chat/:sessionId`   | `{ message, history, problem }` → state-conditioned tutor reply `{ reply, state, abGroup }` |
 | `POST /api/nudge/:sessionId`  | `{ state: confused\|bored\|frustrated, problem, solution?, wrongAnswers? }` → help for an accepted check-in `{ reply, state }` (403 for control sessions; stored in `hints` with `kind: "nudge"`) |
-| `POST /api/problem-events`    | `{ sessionId, type, t, problemId, … }` → main-page problem flow (shown, attempt, hint, chat, nudge-offered/accepted/dismissed/expired, nudge, solved, skipped) into `problemevents`; 202 without MongoDB |
+| `POST /api/problem-events`    | `{ sessionId, type, t, problemId, … }` → main-page problem flow (shown, attempt, hint, chat, nudge-offered/accepted/dismissed/expired, nudge, solved, skipped, unfinished) into `problemevents`; 202 without MongoDB |
 | `POST /infer` (ml-service)    | `{ features: number[][] }` → `{ state, probs }`                                             |
 
 **A/B groups** — `adaptive`: the Gemini prompt includes the inferred cognitive
@@ -264,16 +264,33 @@ Sessions stored before modes existed (no `mode` field) are read as `demo`.
 ## The A/B study (`/study`)
 
 **http://localhost:3000/study** is the participant flow: consent → camera
-check → tutoring → done. Add `?test` for your own trial runs (ST001… codes,
-`isTest: true`).
+check → tutoring → done. Researcher-only URL options:
+
+- `?test`: your own trial runs (ST001… codes, `isTest: true`).
+- `?limit=<seconds>`: a shorter time limit (10–3600 s) to try the time-up
+  ending. Always a test run, so it can't shorten a real participant's session.
+
+What the study page does:
 
 - **Codes:** the participant code (LRN001, LRN002, …) is created when they
   agree on the consent screen, and their group is drawn at that moment. No
   names and no background questions.
+- **Same task for everyone** (`frontend/lib/studyTask.ts`): the same 12
+  problems in the same order, with fixed numbers: 4 warm-ups, 5 medium,
+  3 brain teasers. The tutoring ends after the last problem or after
+  **20 minutes**, whichever comes first. Participants see "Problem 3 of 12"
+  but no countdown, to avoid extra time pressure. The list is frozen
+  (separate from the demo's random bank); change it only between studies.
 - **Tutoring:** the same problem loop as `/` (`frontend/hooks/useTutorSession.ts`),
   but nothing reveals the group or the inferred states: no state/group badges,
   no "New chat", no state chart in the results, no "tuned to your state" tags.
   The adaptive group still gets the check-in bubbles; they are the intervention.
+- **Ending:** after problem 12 the results button says "Finish". At the time
+  limit, or when the participant presses "End session", a problem that is
+  still open is logged as `unfinished` (and an open check-in as
+  `nudge-expired`). Time limit and last problem → `completed`; "End session"
+  → `ended-early`. Whether a completed participant ran out of time shows in
+  the data: fewer than 12 problems ended with `solved`/`skipped`.
 - **Progress:** each participant has a `status` (`in-progress` → `completed`
   or `ended-early`), the furthest `stage` reached, and a `progress` log of
   when each stage was reached (`tutoring` notes whether the camera check passed
@@ -287,8 +304,7 @@ check → tutoring → done. Add `?test` for your own trial runs (ST001… codes
   rate per group is worth reporting.
 
 The consent text is a placeholder until the supervisor / JYU ethics process
-approves it (`frontend/components/study/StudyConsent.tsx`). For now "Finish
-session" in the sidebar ends the tutoring and marks the participant completed.
+approves it (`frontend/components/study/StudyConsent.tsx`).
 
 ## Graceful degradation
 

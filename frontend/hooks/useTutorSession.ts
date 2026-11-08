@@ -36,9 +36,17 @@ export interface ActiveProblem {
 export interface TutorSessionOptions {
   /** false: the results leave out everything about inferred states (study mode). */
   showStates?: boolean;
+  /**
+   * A fixed list of problems, served in this order (study mode); none are
+   * served after the last one. Omit for endless random problems (main page).
+   */
+  sequence?: readonly Problem[];
 }
 
-export function useTutorSession(session: SessionInfo | null, { showStates = true }: TutorSessionOptions = {}) {
+export function useTutorSession(
+  session: SessionInfo | null,
+  { showStates = true, sequence }: TutorSessionOptions = {},
+) {
   // ---------- the current problem ----------
   const [active, setActive] = useState<ActiveProblem | null>(null);
   const [finished, setFinished] = useState<{ record: ProblemRecord; summary: Summary } | null>(null);
@@ -75,7 +83,9 @@ export function useTutorSession(session: SessionInfo | null, { showStates = true
   }
 
   function startProblem() {
-    const problem = nextProblem(recent.current);
+    // counter.number = problems started so far, so it indexes the next one.
+    const problem = sequence ? sequence[counter.current.number] : nextProblem(recent.current);
+    if (!problem) return; // the fixed sequence is used up
     recent.current = [...recent.current, problem].slice(-20);
     const next: ActiveProblem = {
       uid: ++counter.current.uid,
@@ -203,6 +213,20 @@ export function useTutorSession(session: SessionInfo | null, { showStates = true
     finish("skipped", t);
   }
 
+  /**
+   * The run is over (time limit or "End session"). A problem that is still
+   * open is logged as "unfinished", and an open check-in as expired. Call it
+   * before the session is taken away, so the events can still be logged.
+   */
+  function endRun() {
+    const a = activeRef.current;
+    if (!a || done.current) return;
+    const t = Date.now();
+    done.current = true;
+    if (nudge) resolveNudge(nudge, "expired");
+    logEvent({ type: "unfinished", t });
+  }
+
   const wrongAnswers = log.current.events
     .filter((e) => e.type === "attempt" && !e.correct && e.answer)
     .map((e) => e.answer!);
@@ -214,6 +238,11 @@ export function useTutorSession(session: SessionInfo | null, { showStates = true
     stats: sessionStats(history),
     nudge,
     wrongAnswers,
+    /** Length of the fixed sequence; null for endless random problems. */
+    total: sequence ? sequence.length : null,
+    /** The problem on screen is the sequence's last one. */
+    isLast: sequence !== undefined && active !== null && active.number === sequence.length,
+    endRun,
     /** Pass to useSignalBatcher's onState. Stable. */
     handleState,
     startProblem,

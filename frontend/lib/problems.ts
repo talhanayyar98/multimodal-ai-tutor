@@ -68,12 +68,12 @@ function gcd(a: number, b: number): number {
 }
 
 /** Whole-number answers must be exact (the default tolerance would accept 143 for 144). */
-const exact = (value: number): Answer => ({ kind: "number", value, tol: 1e-6 });
+export const exact = (value: number): Answer => ({ kind: "number", value, tol: 1e-6 });
 /** Money and other decimals: right to the cent. */
-const cents = (value: number): Answer => ({ kind: "number", value, tol: 0.005 });
+export const cents = (value: number): Answer => ({ kind: "number", value, tol: 0.005 });
 /** Probabilities: the default tolerance, so 0.167 counts for 1/6. */
-const prob = (value: number): Answer => ({ kind: "number", value });
-const choice = (options: string[], correct: number): Answer => ({ kind: "choice", options, correct });
+export const prob = (value: number): Answer => ({ kind: "number", value });
+export const choice = (options: string[], correct: number): Answer => ({ kind: "choice", options, correct });
 
 type Factory = () => Problem;
 const fixed = (p: Problem): Factory => () => p;

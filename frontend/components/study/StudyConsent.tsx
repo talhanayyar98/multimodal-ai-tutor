@@ -14,6 +14,7 @@ import {
   ShieldIcon,
   TargetIcon,
 } from "@/components/collect/icons";
+import { STUDY_PROBLEMS, STUDY_TIME_LIMIT_MIN } from "@/lib/studyTask";
 
 // Placeholder wording: replace with (or align to) the consent form approved
 // by your supervisor / the JYU ethics process before real participants use it.
@@ -35,13 +36,18 @@ export default function StudyConsent({
       <p className="eyebrow">MSc thesis study · University of Jyväskylä</p>
       <h2 className="hero-title">Learn with an AI tutor</h2>
       <p className="lead">
-        This session is part of an MSc thesis at the University of Jyväskylä. You will solve short
-        maths and logic problems with an AI tutor that you can chat with and ask for hints. The
-        study compares different versions of the tutor; which one you get is decided at random.
+        This session is part of an MSc thesis at the University of Jyväskylä. You will solve{" "}
+        {STUDY_PROBLEMS.length} short maths and logic problems (at most {STUDY_TIME_LIMIT_MIN}{" "}
+        minutes) with an AI tutor that you can chat with and ask for hints. The study compares
+        different versions of the tutor; which one you get is decided at random.
       </p>
 
       <div className="facts">
-        <Fact icon={<TargetIcon />} value="Short problems" label="maths and logic" />
+        <Fact
+          icon={<TargetIcon />}
+          value={`${STUDY_PROBLEMS.length} problems`}
+          label={`up to ${STUDY_TIME_LIMIT_MIN} minutes`}
+        />
         <Fact icon={<ChatIcon />} value="AI tutor" label="chat and hints any time" />
         <Fact icon={<ShieldIcon />} value="No video" label="leaves this computer" />
       </div>
