@@ -58,9 +58,23 @@ This uses `concurrently` to start all three services:
 - backend → http://127.0.0.1:5000
 - ml-service → http://127.0.0.1:8000 (uses `ml-service/.venv/bin/uvicorn`, so the venv must exist)
 
-Open http://localhost:3000, allow camera access, and work on the exercise.
+Open http://localhost:3000, allow camera access, and solve problems. Each one
+is drawn at random from a mixed bank (`frontend/lib/problems.ts`: arithmetic,
+percentages, fractions, algebra, patterns, geometry, logic puzzles,
+probability; warm-up → brain teaser) so that different states actually occur.
 Signal batches leave every 5 s; the header shows the latest inferred state and
-"Get a hint" fetches a state-adapted hint.
+**Hint** fetches a hint.
+
+- **Check-ins (adaptive group only):** when two readings in a row (≈10 s) say
+  confused, bored or frustrated, the tutor offers help in a bubble above the
+  chat input: a hint, a more interesting retelling, or small steps. On "yes",
+  `POST /api/nudge` asks Gemini for that kind of help. Rules (cooldown, max per
+  problem, expiry) are in `frontend/lib/nudges.ts`.
+- **Results:** after each solved (or skipped) problem a dialog shows stars,
+  points, the inferred state over time with hints and answers marked, the
+  state mix before vs after the first hint, and a moment-by-moment table; then
+  the next problem starts. Hints never cost points, so the score doesn't
+  discourage accepting help.
 
 > **macOS note:** AirPlay Receiver also listens on port 5000, which is why the
 > backend binds `127.0.0.1` specifically (that coexists with AirPlay). If you
@@ -217,6 +231,8 @@ analysis with `{ synthetic: { $ne: true } }` on `participants`.
 | `POST /api/signals` (backend) | 5 s batch in, stored + forwarded to ML → `{ ok, state }`                                    |
 | `GET /api/hint/:sessionId`    | ML state + Gemini hint → `{ hint, state, abGroup }` (`?problem=…`)                          |
 | `POST /api/chat/:sessionId`   | `{ message, history, problem }` → state-conditioned tutor reply `{ reply, state, abGroup }` |
+| `POST /api/nudge/:sessionId`  | `{ state: confused\|bored\|frustrated, problem, solution?, wrongAnswers? }` → help for an accepted check-in `{ reply, state }` (403 for control sessions; stored in `hints` with `kind: "nudge"`) |
+| `POST /api/problem-events`    | `{ sessionId, type, t, problemId, … }` → main-page problem flow (shown, attempt, hint, chat, nudge-offered/accepted/dismissed/expired, nudge, solved, skipped) into `problemevents`; 202 without MongoDB |
 | `POST /infer` (ml-service)    | `{ features: number[][] }` → `{ state, probs }`                                             |
 
 **A/B groups** — assigned randomly at session start. `adaptive`: the Gemini

@@ -125,6 +125,64 @@ export async function sendChat(
   );
 }
 
+// ---------- main page: check-ins + problem events ----------
+
+export interface NudgeResponse {
+  reply: string;
+  state: string;
+}
+
+/** Help from a state-triggered check-in the learner accepted (adaptive group only). */
+export async function fetchNudge(
+  sessionId: string,
+  body: { state: string; problem: string; solution?: string; wrongAnswers: string[] },
+): Promise<NudgeResponse> {
+  return parse(
+    await fetch(`${BACKEND_URL}/api/nudge/${sessionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/** Must match PROBLEM_EVENT_TYPES in backend/src/models.ts. */
+export type ProblemEventType =
+  | "shown"
+  | "attempt"
+  | "hint"
+  | "chat"
+  | "nudge-offered"
+  | "nudge-accepted"
+  | "nudge-dismissed"
+  | "nudge-expired"
+  | "nudge"
+  | "solved"
+  | "skipped";
+
+export interface ProblemEventBody {
+  type: ProblemEventType;
+  t: number;
+  problemId: string;
+  topic: string;
+  difficulty: string;
+  problemNo: number;
+  text?: string;
+  expected?: string;
+  answer?: string;
+  correct?: boolean;
+  state?: string;
+}
+
+/** Fire and forget: logging must never get in the learner's way. */
+export function logProblemEvent(sessionId: string, event: ProblemEventBody): void {
+  void fetch(`${BACKEND_URL}/api/problem-events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId, ...event }),
+  }).catch(() => {});
+}
+
 // ---------- /collect pilot ----------
 
 export interface Intake {

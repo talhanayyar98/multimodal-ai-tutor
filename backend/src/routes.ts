@@ -1,9 +1,16 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { dbReady } from "./db";
-import { generateChatReply, generateHint, type ChatTurn } from "./gemini";
+import {
+  generateChatReply,
+  generateHint,
+  generateNudge,
+  NUDGE_STATES,
+  type ChatTurn,
+  type NudgeState,
+} from "./gemini";
 import { inferState, type ModelInfo } from "./ml";
-import { ChatMessage, Hint, Session, SignalBatch } from "./models";
+import { ChatMessage, Hint, PROBLEM_EVENT_TYPES, ProblemEvent, Session, SignalBatch } from "./models";
 import { findSession } from "./sessionLookup";
 import * as store from "./store";
 
@@ -163,6 +170,104 @@ router.post("/chat/:sessionId", async (req, res) => {
   }
   res.json({ reply, state, abGroup: session.abGroup });
 });
+
+// Help from a state-triggered check-in the learner said yes to. The client
+// sends the state it offered help for (the one the learner saw), not a fresh
+// inference, so the help matches the offer.
+router.post("/nudge/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  const { state, problem, solution, wrongAnswers } = req.body ?? {};
+  if (
+    !(NUDGE_STATES as readonly unknown[]).includes(state) ||
+    typeof problem !== "string" ||
+    !problem.trim() ||
+    problem.length > 2000
+  ) {
+    res.status(400).json({
+      error: `expected { state: ${NUDGE_STATES.join(" | ")}, problem: string, solution?: string, wrongAnswers?: string[] }`,
+    });
+    return;
+  }
+  const session = await findSession(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "unknown session" });
+    return;
+  }
+  // Check-ins react to the inferred state, so they are part of the adaptive condition only.
+  if (session.abGroup !== "adaptive") {
+    res.status(403).json({ error: "check-ins are only offered in the adaptive group" });
+    return;
+  }
+
+  const reply = await generateNudge({
+    state: state as NudgeState,
+    problem: problem.trim(),
+    solution: str(solution, 2000),
+    wrongAnswers: Array.isArray(wrongAnswers)
+      ? wrongAnswers
+          .filter((a): a is string => typeof a === "string" && a.trim() !== "")
+          .map((a) => a.trim().slice(0, 40))
+          .slice(-5)
+      : [],
+  });
+
+  if (dbReady()) {
+    await Hint.create({
+      sessionId,
+      text: reply,
+      state,
+      abGroup: session.abGroup,
+      problem: problem.trim(),
+      kind: "nudge",
+    }).catch(warnDb("nudge"));
+  }
+  res.json({ reply, state });
+});
+
+// Main-page problem flow. Best effort: without MongoDB the event is dropped (202).
+router.post("/problem-events", async (req, res) => {
+  const body = req.body ?? {};
+  if (
+    typeof body.sessionId !== "string" ||
+    !(PROBLEM_EVENT_TYPES as readonly unknown[]).includes(body.type) ||
+    typeof body.t !== "number" ||
+    !(body.t > 1e12 && body.t < 1e13)
+  ) {
+    res.status(400).json({
+      error: `expected { sessionId: string, type: ${PROBLEM_EVENT_TYPES.join(" | ")}, t: epoch ms }`,
+    });
+    return;
+  }
+  const session = await findSession(body.sessionId);
+  if (!session) {
+    res.status(404).json({ error: "unknown session" });
+    return;
+  }
+  if (!dbReady()) {
+    res.status(202).json({ stored: false });
+    return;
+  }
+  await ProblemEvent.create({
+    sessionId: body.sessionId,
+    abGroup: session.abGroup,
+    type: body.type,
+    problemId: str(body.problemId, 64),
+    topic: str(body.topic, 32),
+    difficulty: str(body.difficulty, 16),
+    problemNo: Number.isInteger(body.problemNo) && body.problemNo > 0 ? body.problemNo : undefined,
+    text: str(body.text, 1000),
+    expected: str(body.expected, 200),
+    answer: str(body.answer, 200),
+    correct: typeof body.correct === "boolean" ? body.correct : undefined,
+    state: str(body.state, 16),
+    t: body.t,
+  }).catch(warnDb("problem event"));
+  res.status(201).json({ stored: true });
+});
+
+function str(value: unknown, max: number): string | undefined {
+  return typeof value === "string" && value.trim() ? value.slice(0, max) : undefined;
+}
 
 function warnDb(what: string) {
   return (err: Error) => console.warn(`[db] failed to store ${what}:`, err.message);
