@@ -22,10 +22,13 @@ export default function ProblemCard({
   done,
   onAttempt,
   onSkip,
+  total,
 }: {
   problem: Problem;
   /** 1-based position in the session. */
   number: number;
+  /** Size of a fixed problem set (study): shows "Problem 3 of 12". */
+  total?: number;
   startedAt: number;
   /** Solved or skipped: the card freezes. */
   done: boolean;
@@ -132,7 +135,10 @@ export default function ProblemCard({
           {DIFFICULTY_LABEL[problem.difficulty]}
         </span>
         <span className="problem-meta">
-          <span>Problem {number}</span>
+          <span data-testid="problem-number">
+            Problem {number}
+            {total ? ` of ${total}` : ""}
+          </span>
           <span className="problem-timer" title="Time on this problem">
             <ClockIcon size={13} /> {formatClock(now - startedAt)}
           </span>

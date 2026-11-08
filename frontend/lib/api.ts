@@ -159,7 +159,8 @@ export type ProblemEventType =
   | "nudge-expired"
   | "nudge"
   | "solved"
-  | "skipped";
+  | "skipped"
+  | "unfinished";
 
 export interface ProblemEventBody {
   type: ProblemEventType;

@@ -61,6 +61,7 @@ export default function ProblemResults({
   modelNote,
   onNext,
   showStates = true,
+  nextLabel = "Next problem",
 }: {
   record: ProblemRecord;
   summary: Summary;
@@ -73,6 +74,8 @@ export default function ProblemResults({
    * Pair it with summarize(…, { states: false }) so the insights match.
    */
   showStates?: boolean;
+  /** The button's label, e.g. "Finish" after the study's last problem. */
+  nextLabel?: string;
 }) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const solved = record.outcome === "solved";
@@ -235,7 +238,7 @@ export default function ProblemResults({
 
         <footer className="results-foot">
           <button ref={nextRef} className="btn btn-next" onClick={onNext} data-testid="next-problem">
-            Next problem <ArrowRightIcon size={16} />
+            {nextLabel} <ArrowRightIcon size={16} />
           </button>
         </footer>
       </section>

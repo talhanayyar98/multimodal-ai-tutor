@@ -33,6 +33,7 @@ export default function TutorWorkspace({
           key={active.uid}
           problem={active.problem}
           number={active.number}
+          total={tutor.total ?? undefined}
           startedAt={active.startedAt}
           done={finished !== null}
           onAttempt={tutor.handleAttempt}
