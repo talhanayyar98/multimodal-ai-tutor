@@ -10,8 +10,17 @@ import {
   type NudgeState,
 } from "./gemini";
 import { inferState, type ModelInfo } from "./ml";
-import { ChatMessage, Hint, PROBLEM_EVENT_TYPES, ProblemEvent, Session, SignalBatch } from "./models";
-import { findSession } from "./sessionLookup";
+import {
+  ChatMessage,
+  Hint,
+  PROBLEM_EVENT_TYPES,
+  ProblemEvent,
+  Session,
+  SESSION_MODES,
+  SignalBatch,
+  StudyParticipant,
+} from "./models";
+import { findSession, participantOf } from "./sessionLookup";
 import * as store from "./store";
 
 // Must match FEATURE_ORDER in frontend/lib/features.ts and FEATURE_DIM in ml-service/model.py.
@@ -20,27 +29,75 @@ const PARTICIPANT_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 export const router = Router();
 
+// Body {} (or { mode: "demo" }): main page, random group, no participant.
+// { mode: "study", participantId }: the study participant's fixed group.
+// { mode: "pilot", participantId }: always control.
 router.post("/session", async (req, res) => {
-  const { mode, participantId } = req.body ?? {};
-  const pilot = mode === "pilot";
-  if (pilot && (typeof participantId !== "string" || !PARTICIPANT_ID_RE.test(participantId))) {
+  const { mode = "demo", participantId } = req.body ?? {};
+  if (!(SESSION_MODES as readonly unknown[]).includes(mode)) {
+    res.status(400).json({ error: `mode must be one of: ${SESSION_MODES.join(", ")}` });
+    return;
+  }
+  const sessionMode = mode as store.SessionMode;
+  if (
+    sessionMode !== "demo" &&
+    (typeof participantId !== "string" || !PARTICIPANT_ID_RE.test(participantId))
+  ) {
     res.status(400).json({
-      error: "pilot sessions need a participantId of 1–32 letters, digits, '-' or '_'",
+      error: `${sessionMode} sessions need a participantId of 1–32 letters, digits, '-' or '_'`,
     });
     return;
   }
 
-  const session: store.SessionInfo = {
-    sessionId: crypto.randomUUID(),
+  let abGroup: store.AbGroup;
+  if (sessionMode === "study") {
+    // Between-subjects: the group was drawn once, when the participant joined
+    // (POST /api/study/participants), so a reload or a second session keeps it.
+    if (!dbReady()) {
+      res.status(503).json({ error: "MongoDB unavailable — study data is not being stored" });
+      return;
+    }
+    const participant = await StudyParticipant.findOne(
+      { participantId },
+      { abGroup: 1, status: 1 },
+    ).lean();
+    if (!participant) {
+      res.status(404).json({ error: "unknown study participant" });
+      return;
+    }
+    if (participant.status !== "in-progress") {
+      res.status(409).json({ error: `study participant already ${participant.status}` });
+      return;
+    }
+    abGroup = participant.abGroup as store.AbGroup;
+  } else if (sessionMode === "pilot") {
     // Pilot (labeling) sessions never adapt: the untrained model's state is
     // noise, and the self-reports must describe learners under unadapted tutoring.
-    abGroup: pilot ? "control" : Math.random() < 0.5 ? "adaptive" : "control",
-    mode: pilot ? "pilot" : "study",
-    participantId: pilot ? participantId : undefined,
+    abGroup = "control";
+  } else {
+    abGroup = Math.random() < 0.5 ? "adaptive" : "control";
+  }
+
+  const session: store.SessionInfo = {
+    sessionId: crypto.randomUUID(),
+    abGroup,
+    mode: sessionMode,
+    participantId: sessionMode === "demo" ? undefined : participantId,
     createdAt: new Date(),
   };
+  if (sessionMode === "study") {
+    // A study session that isn't stored can't be linked to its participant later.
+    try {
+      await Session.create(session);
+    } catch (err) {
+      warnDb("study session")(err as Error);
+      res.status(500).json({ error: "session not stored" });
+      return;
+    }
+  } else if (dbReady()) {
+    await Session.create(session).catch(warnDb("session"));
+  }
   store.rememberSession(session);
-  if (dbReady()) await Session.create(session).catch(warnDb("session"));
   res.status(201).json({
     sessionId: session.sessionId,
     abGroup: session.abGroup,
@@ -78,8 +135,11 @@ router.post("/signals", async (req, res) => {
   }
 
   if (dbReady()) {
+    // Unknown sessions are still stored, as before (just without a participant).
+    const session = await findSession(sessionId).catch(() => null);
     await SignalBatch.create({
       sessionId,
+      participantId: participantOf(session),
       windowStart,
       windowEnd,
       features,
@@ -113,9 +173,14 @@ router.get("/hint/:sessionId", async (req, res) => {
   const hint = await generateHint({ state, abGroup: session.abGroup, problem });
 
   if (dbReady()) {
-    await Hint.create({ sessionId, text: hint, state, abGroup: session.abGroup, problem }).catch(
-      warnDb("hint"),
-    );
+    await Hint.create({
+      sessionId,
+      participantId: participantOf(session),
+      text: hint,
+      state,
+      abGroup: session.abGroup,
+      problem,
+    }).catch(warnDb("hint"));
   }
   res.json({ hint, state, abGroup: session.abGroup });
 });
@@ -163,9 +228,10 @@ router.post("/chat/:sessionId", async (req, res) => {
   });
 
   if (dbReady()) {
+    const participantId = participantOf(session);
     await ChatMessage.insertMany([
-      { sessionId, role: "student", text: message.trim(), state },
-      { sessionId, role: "tutor", text: reply, state },
+      { sessionId, participantId, role: "student", text: message.trim(), state },
+      { sessionId, participantId, role: "tutor", text: reply, state },
     ]).catch(warnDb("chat messages"));
   }
   res.json({ reply, state, abGroup: session.abGroup });
@@ -214,6 +280,7 @@ router.post("/nudge/:sessionId", async (req, res) => {
   if (dbReady()) {
     await Hint.create({
       sessionId,
+      participantId: participantOf(session),
       text: reply,
       state,
       abGroup: session.abGroup,
@@ -249,6 +316,7 @@ router.post("/problem-events", async (req, res) => {
   }
   await ProblemEvent.create({
     sessionId: body.sessionId,
+    participantId: participantOf(session),
     abGroup: session.abGroup,
     type: body.type,
     problemId: str(body.problemId, 64),

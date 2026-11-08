@@ -17,7 +17,7 @@ import {
   UserIcon,
 } from "./icons";
 
-function Fact({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
+export function Fact({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
   return (
     <div className="fact">
       <span className="fact-icon">{icon}</span>
@@ -29,7 +29,7 @@ function Fact({ icon, value, label }: { icon: ReactNode; value: string; label: s
   );
 }
 
-function Row({ icon, title, children }: { icon: ReactNode; title?: string; children: ReactNode }) {
+export function Row({ icon, title, children }: { icon: ReactNode; title?: string; children: ReactNode }) {
   return (
     <li className="info-row">
       <span className="info-icon">{icon}</span>
@@ -41,7 +41,7 @@ function Row({ icon, title, children }: { icon: ReactNode; title?: string; child
   );
 }
 
-function AgreeCard({
+export function AgreeCard({
   checked,
   onChange,
   testId,

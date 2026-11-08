@@ -2,7 +2,7 @@ import { model, Schema } from "mongoose";
 import type { AbGroup, SessionMode } from "./store";
 
 const AB_GROUPS: AbGroup[] = ["adaptive", "control"];
-const SESSION_MODES: SessionMode[] = ["study", "pilot"];
+export const SESSION_MODES: readonly SessionMode[] = ["demo", "study", "pilot"];
 
 // The four model states plus "neutral" ("none of these fit"). Neutral reports
 // are kept so the training step can decide whether to drop them.
@@ -31,13 +31,16 @@ export const EXERCISE_EVENT_TYPES = [
 const SessionSchema = new Schema({
   sessionId: { type: String, required: true, unique: true },
   abGroup: { type: String, enum: AB_GROUPS, required: true },
-  mode: { type: String, enum: SESSION_MODES, default: "study" },
+  // Sessions stored before modes existed came from the main page, hence "demo".
+  mode: { type: String, enum: SESSION_MODES, default: "demo" },
   participantId: { type: String, index: true },
   createdAt: { type: Date, default: Date.now },
 });
 
 const SignalBatchSchema = new Schema({
   sessionId: { type: String, required: true, index: true },
+  // The session's participant (LRN…/ST… study, P…/T… pilot); unset for demo sessions.
+  participantId: { type: String, index: true },
   windowStart: Number,
   windowEnd: Number,
   features: Schema.Types.Mixed,
@@ -50,6 +53,7 @@ const SignalBatchSchema = new Schema({
 
 const HintSchema = new Schema({
   sessionId: { type: String, required: true, index: true },
+  participantId: { type: String, index: true }, // unset for demo sessions
   text: { type: String, required: true },
   state: String,
   abGroup: { type: String, enum: AB_GROUPS },
@@ -78,6 +82,7 @@ export const PROBLEM_EVENT_TYPES = [
 
 const ProblemEventSchema = new Schema({
   sessionId: { type: String, required: true, index: true },
+  participantId: { type: String, index: true }, // unset for demo sessions
   abGroup: { type: String, enum: AB_GROUPS },
   type: { type: String, enum: PROBLEM_EVENT_TYPES, required: true },
   problemId: String,
@@ -96,6 +101,7 @@ const ProblemEventSchema = new Schema({
 
 const ChatMessageSchema = new Schema({
   sessionId: { type: String, required: true, index: true },
+  participantId: { type: String, index: true }, // unset for demo sessions
   role: { type: String, enum: ["student", "tutor"], required: true },
   text: { type: String, required: true },
   state: String,
@@ -163,7 +169,49 @@ const ExerciseEventSchema = new Schema({
   receivedAt: { type: Date, default: Date.now },
 });
 
-// Atomic sequence numbers for participant codes ("participant", "test-participant").
+// The /study flow, in order. A participant only ever moves forward, and can
+// only be marked "completed" after reaching the last stage.
+// Must match StudyStage in frontend/lib/api.ts.
+export const STUDY_STAGES = ["consent", "camera", "tutoring"] as const;
+export type StudyStage = (typeof STUDY_STAGES)[number];
+
+// "in-progress" until finished. Someone who closes the tab stays in-progress
+// forever, so for the analysis: status "completed" (and isTest false).
+export const STUDY_STATUSES = ["in-progress", "completed", "ended-early"] as const;
+
+// A participant of the A/B study (/study). Kept apart from the pilot's
+// `participants` on purpose: train.py reads that collection, and study
+// participants must never end up in the training data. Like the pilot, no
+// names: LRN001… (ST001… for researcher test runs).
+const StudyParticipantSchema = new Schema({
+  participantId: { type: String, required: true, unique: true },
+  seq: { type: Number, required: true },
+  isTest: { type: Boolean, default: false },
+  // Between-subjects: fixed for the whole study, every session of this participant uses it.
+  abGroup: { type: String, enum: AB_GROUPS, required: true },
+  // The allocation block the group was drawn from (see allocation.ts), for auditing.
+  allocationBlock: { type: Number, required: true },
+  status: { type: String, enum: STUDY_STATUSES, default: "in-progress" },
+  // The furthest stage reached, and when each stage was reached (where people drop out).
+  stage: { type: String, enum: STUDY_STAGES, default: "consent" },
+  // `note`: a short detail, e.g. "face-ok" / "skipped" for how the camera check ended.
+  progress: [{ _id: false, stage: { type: String, enum: STUDY_STAGES }, at: Date, note: String }],
+  consentAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+  finishedAt: Date,
+});
+
+// The shuffled group order for one block of BLOCK_SIZE consecutive study
+// participants (see allocation.ts). _id "study-<n>", or "study-test-<n>" for
+// test runs. Drawn once, when the block's first participant joins.
+const AllocationBlockSchema = new Schema({
+  _id: { type: String, required: true },
+  groups: { type: [String], required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+// Atomic sequence numbers for participant codes: "participant" and
+// "test-participant" (pilot), "study-participant" and "study-test-participant" (study).
 const CounterSchema = new Schema({
   _id: { type: String, required: true },
   seq: { type: Number, default: 0 },
@@ -177,4 +225,6 @@ export const ChatMessage = model("ChatMessage", ChatMessageSchema);
 export const SelfReport = model("SelfReport", SelfReportSchema);
 export const Participant = model("Participant", ParticipantSchema);
 export const ExerciseEvent = model("ExerciseEvent", ExerciseEventSchema);
+export const StudyParticipant = model("StudyParticipant", StudyParticipantSchema);
+export const AllocationBlock = model("AllocationBlock", AllocationBlockSchema);
 export const Counter = model("Counter", CounterSchema);

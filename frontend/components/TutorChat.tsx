@@ -70,6 +70,7 @@ export default function TutorChat({
   onNudgeAnswer,
   onReply,
   onBusyChange,
+  showStates = true,
 }: {
   sessionId: string | null;
   abGroup: "adaptive" | "control" | null;
@@ -93,6 +94,8 @@ export default function TutorChat({
   /** A tutor reply arrived ("nudge" = help from an accepted check-in). */
   onReply?: (kind: "chat" | "hint" | "nudge", state?: string) => void;
   onBusyChange?: (busy: boolean) => void;
+  /** false: no "tuned to your state" tags on replies (study mode). */
+  showStates?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -232,7 +235,7 @@ export default function TutorChat({
             data-testid="chat-reset"
             onClick={handleReset}
             disabled={!ready || busy}
-            title="Clear the conversation, keep the same session and A/B group"
+            title="Clear the conversation (your session stays the same)"
           >
             Reset chat
           </button>
@@ -272,7 +275,7 @@ export default function TutorChat({
                 </span>
               )}
               {m.role === "user" ? m.text : <RevealText text={m.text} />}
-              {m.state && abGroup === "adaptive" && (
+              {m.state && abGroup === "adaptive" && showStates && (
                 <span className="msg-meta">tuned to your state: {m.state}</span>
               )}
             </div>
