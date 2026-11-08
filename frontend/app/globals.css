@@ -3908,3 +3908,31 @@ body:has(.page.home) {
 .study .code-value {
   color: var(--ai-2);
 }
+
+/* Pre-/post-test card (/study). */
+.study .study-test .study-test-rules {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--text-dim);
+}
+
+.study .study-test .problem-foot {
+  margin-top: 0.75rem;
+}
+
+.study .study-test-end {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.4rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* `.collect-card p` would shrink and dim the question; keep it like the tutoring's. */
+.study .study-test .problem-text {
+  margin: 0.5rem 0 1rem;
+  font-size: 1.12rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+}

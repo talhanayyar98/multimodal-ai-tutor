@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ClockIcon } from "@/components/collect/icons";
 import { formatClock } from "@/lib/problemReport";
-import { DIFFICULTY_LABEL, isCorrect, readAnswer, TOPIC_GLYPH, type Problem } from "@/lib/problems";
+import { DIFFICULTY_LABEL, isCorrectInput, readAnswer, TOPIC_GLYPH, type Problem } from "@/lib/problems";
 
 const RETRY_LINES = [
   "Not quite. Give it another go!",
@@ -94,7 +94,7 @@ export default function ProblemCard({
       });
       return;
     }
-    const correct = isCorrect(problem, value);
+    const correct = isCorrectInput(problem, input);
     onAttempt(input.trim(), correct);
     if (correct) setFeedback({ kind: "correct", text: "Correct!" });
     else {

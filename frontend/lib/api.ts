@@ -188,10 +188,16 @@ export function logProblemEvent(sessionId: string, event: ProblemEventBody): voi
 // ---------- /study A/B study ----------
 
 /** The /study flow in order. Must match STUDY_STAGES in backend/src/models.ts. */
-export type StudyStage = "consent" | "camera" | "tutoring";
+export type StudyStage = "consent" | "pretest" | "camera" | "tutoring" | "posttest";
 
-/** After consent: a new participant code (LRN001…, ST001… for test runs); the group is drawn server-side. */
-export async function createStudyParticipant(isTest: boolean): Promise<{ participantId: string }> {
+export interface NewStudyParticipant {
+  participantId: string;
+  /** Which test form (lib/studyTests.ts) comes before and after the tutoring. */
+  testForms: { pre: "A" | "B"; post: "A" | "B" };
+}
+
+/** After consent: a new participant code (LRN001…, ST001… for test runs); group and test order are drawn server-side. */
+export async function createStudyParticipant(isTest: boolean): Promise<NewStudyParticipant> {
   return parse(
     await fetch(`${BACKEND_URL}/api/study/participants`, {
       method: "POST",
@@ -219,6 +225,32 @@ export async function setStudyStage(participantId: string, stage: StudyStage, no
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stage, note }),
+    }),
+  );
+}
+
+export interface TestAnswerBody {
+  test: "pre" | "post";
+  itemId: string;
+  skill: string;
+  mirrors: string;
+  /** 1-based position in the test. */
+  position: number;
+  /** As typed; "" for "I don't know". */
+  answer: string;
+  dontKnow: boolean;
+  correct: boolean;
+  shownAt: number;
+  answeredAt: number;
+}
+
+/** One answered pre-/post-test question. A repeat of the same question is ignored (the first answer counts). */
+export async function postTestAnswer(participantId: string, body: TestAnswerBody): Promise<void> {
+  await parse(
+    await fetch(`${BACKEND_URL}/api/study/participants/${encodeURIComponent(participantId)}/test-answers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     }),
   );
 }

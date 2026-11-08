@@ -67,12 +67,14 @@ function gcd(a: number, b: number): number {
   return b === 0 ? Math.abs(a) : gcd(b, a % b);
 }
 
+export type NumberAnswer = Extract<Answer, { kind: "number" }>;
+
 /** Whole-number answers must be exact (the default tolerance would accept 143 for 144). */
-export const exact = (value: number): Answer => ({ kind: "number", value, tol: 1e-6 });
+export const exact = (value: number): NumberAnswer => ({ kind: "number", value, tol: 1e-6 });
 /** Money and other decimals: right to the cent. */
-export const cents = (value: number): Answer => ({ kind: "number", value, tol: 0.005 });
+export const cents = (value: number): NumberAnswer => ({ kind: "number", value, tol: 0.005 });
 /** Probabilities: the default tolerance, so 0.167 counts for 1/6. */
-export const prob = (value: number): Answer => ({ kind: "number", value });
+export const prob = (value: number): NumberAnswer => ({ kind: "number", value });
 export const choice = (options: string[], correct: number): Answer => ({ kind: "choice", options, correct });
 
 type Factory = () => Problem;
@@ -532,20 +534,41 @@ export function nextProblem(recent: readonly Problem[] = []): Problem {
 // ---------- answer checking ----------
 
 /**
- * Lenient on format: "x = 8", "€0.05", "7.5°", "48 km/h" and "5,050" all read
- * as numbers; fractions, decimals and percents work as in the pilot.
+ * Every number the input can mean, most likely first; empty if it isn't a
+ * number. Lenient on format: "x = 8", "€0.05", "7.5°", "48 km/h"; fractions,
+ * decimals and percents work as in the pilot. A comma is a decimal comma
+ * ("0,375", as in Finnish) unless it groups thousands ("5,050"). "1,083" is
+ * genuinely ambiguous (1083 or 1.083), so it yields both readings; they differ
+ * by a factor of 1000, so accepting either can't let a wrong answer through.
  */
-export function readAnswer(raw: string): number | null {
+export function readAnswers(raw: string): number[] {
   let s = raw.trim().toLowerCase();
   s = s.replace(/^[a-z]\s*=\s*/, "").replace(/^day\s+/, "");
   s = s.replace(/[€$£°]/g, "");
   s = s.replace(/\s*(km\/h|kmh|cm|degrees?|deg|minutes?|mins?|days?|euros?|eur|handshakes?)$/, "").trim();
-  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, ""); // thousands separators
-  return parseNumber(s);
+  // Thousands groups never start with 0, so "0,917" is always a decimal.
+  const grouped = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s) && !/^-?0/.test(s);
+  if (!grouped) {
+    const value = parseNumber(s);
+    return value === null ? [] : [value];
+  }
+  const thousands = parseNumber(s.replace(/,/g, ""));
+  const decimal = /^-?\d{1,3},\d{3}$/.test(s) ? parseNumber(s) : null; // one comma: maybe a decimal comma
+  return [thousands, decimal].filter((v): v is number => v !== null);
+}
+
+/** The most likely number the input means, or null if it isn't a number. */
+export function readAnswer(raw: string): number | null {
+  return readAnswers(raw)[0] ?? null;
 }
 
 export function isCorrect(problem: Problem, value: number): boolean {
   return problem.answer.kind === "number" && isCorrectNumber(problem.answer, value);
+}
+
+/** Correct under any reading of the input (see readAnswers). */
+export function isCorrectInput(problem: Problem, raw: string): boolean {
+  return readAnswers(raw).some((value) => isCorrect(problem, value));
 }
 
 /** The correct answer as text, for logs and prompts. */

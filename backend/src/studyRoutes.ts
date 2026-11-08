@@ -7,7 +7,7 @@
 import { Router, type Response } from "express";
 import { assignGroup } from "./allocation";
 import { dbReady } from "./db";
-import { Counter, STUDY_STAGES, StudyParticipant, type StudyStage } from "./models";
+import { Counter, STUDY_STAGES, StudyParticipant, TESTS, TestAnswer, type StudyStage } from "./models";
 
 export const studyRouter = Router();
 
@@ -25,6 +25,7 @@ studyRouter.post("/study/participants", async (req, res) => {
   // never shift the real participants' (LRN) numbering or group balance.
   const test = isTest === true;
   let participantId: string;
+  let testForms: { pre: string; post: string };
   try {
     const counter = await Counter.findOneAndUpdate(
       { _id: test ? "study-test-participant" : "study-participant" },
@@ -33,7 +34,8 @@ studyRouter.post("/study/participants", async (req, res) => {
     );
     const seq = counter.seq;
     participantId = `${test ? "ST" : "LRN"}${String(seq).padStart(3, "0")}`;
-    const { abGroup, block } = await assignGroup(seq, test);
+    const { abGroup, testOrder, block } = await assignGroup(seq, test);
+    testForms = { pre: testOrder[0], post: testOrder[1] };
     const now = new Date();
     await StudyParticipant.create({
       participantId,
@@ -41,6 +43,9 @@ studyRouter.post("/study/participants", async (req, res) => {
       isTest: test,
       abGroup,
       allocationBlock: block,
+      testOrder,
+      pretest: { form: testForms.pre, answered: 0, correct: 0, dontKnow: 0 },
+      posttest: { form: testForms.post, answered: 0, correct: 0, dontKnow: 0 },
       stage: "consent",
       progress: [{ stage: "consent", at: now }],
       consentAt: now,
@@ -51,8 +56,99 @@ studyRouter.post("/study/participants", async (req, res) => {
     return;
   }
   // The group is deliberately not returned here: the participant's sessions
-  // carry it, and the study page never shows it.
-  res.status(201).json({ participantId });
+  // carry it, and the study page never shows it. The test forms are needed to
+  // show the right questions (and say nothing about the group).
+  res.status(201).json({ participantId, testForms });
+});
+
+// One answered pre-/post-test question (scored by the page with the same
+// checker as the tutoring; the raw answer is kept so it can be re-scored).
+// Only accepted while the participant is at that test's stage. A repeated
+// answer to the same question is ignored: the first one counts.
+studyRouter.post("/study/participants/:participantId/test-answers", async (req, res) => {
+  if (!requireDb(res)) return;
+  const { participantId } = req.params;
+  const b = req.body ?? {};
+  const dontKnow = b.dontKnow === true;
+  if (
+    !(TESTS as readonly unknown[]).includes(b.test) ||
+    typeof b.itemId !== "string" ||
+    !/^[A-Za-z0-9_-]{1,64}$/.test(b.itemId) ||
+    !Number.isInteger(b.position) ||
+    b.position < 1 ||
+    b.position > 50 ||
+    typeof b.dontKnow !== "boolean" ||
+    typeof b.correct !== "boolean" ||
+    (dontKnow && b.correct) ||
+    (!dontKnow && (typeof b.answer !== "string" || !b.answer.trim() || b.answer.length > 200)) ||
+    !isEpochMs(b.shownAt) ||
+    !isEpochMs(b.answeredAt) ||
+    b.answeredAt < b.shownAt
+  ) {
+    res.status(400).json({
+      error:
+        "expected { test: pre | post, itemId, position, answer (unless dontKnow), dontKnow: boolean, " +
+        "correct: boolean (false for dontKnow), skill?, mirrors?, shownAt, answeredAt >= shownAt }",
+    });
+    return;
+  }
+  const test = b.test as (typeof TESTS)[number];
+  try {
+    const participant = await StudyParticipant.findOne(
+      { participantId },
+      { status: 1, stage: 1, testOrder: 1 },
+    ).lean();
+    if (!participant) {
+      res.status(404).json({ error: "unknown study participant" });
+      return;
+    }
+    const stage = test === "pre" ? "pretest" : "posttest";
+    if (participant.status !== "in-progress" || participant.stage !== stage) {
+      res.status(409).json({ error: `not at the ${stage} (status ${participant.status}, stage ${participant.stage})` });
+      return;
+    }
+    const form = participant.testOrder[test === "pre" ? 0 : 1];
+    // Item ids are "<form>-<skill>" (frontend/lib/studyTests.ts): refuse a question from the other form.
+    if (!b.itemId.startsWith(`${form}-`)) {
+      res.status(400).json({ error: `${b.itemId} is not in form ${form}, this participant's ${test}-test` });
+      return;
+    }
+    try {
+      await TestAnswer.create({
+        participantId,
+        test,
+        form,
+        itemId: b.itemId,
+        skill: text(b.skill, 32),
+        mirrors: text(b.mirrors, 64),
+        position: b.position,
+        answer: dontKnow ? "" : b.answer.trim(),
+        dontKnow,
+        correct: dontKnow ? false : b.correct,
+        shownAt: b.shownAt,
+        answeredAt: b.answeredAt,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code !== 11000) throw err;
+      res.json({ ok: true, duplicate: true }); // a retried request: the first answer counts
+      return;
+    }
+    // Recount instead of incrementing, so the summary can't drift from the answers.
+    const mine = { participantId, test };
+    const [answered, correct, dontKnowCount] = await Promise.all([
+      TestAnswer.countDocuments(mine),
+      TestAnswer.countDocuments({ ...mine, correct: true }),
+      TestAnswer.countDocuments({ ...mine, dontKnow: true }),
+    ]);
+    await StudyParticipant.updateOne(
+      { participantId },
+      { $set: { [`${stage}.answered`]: answered, [`${stage}.correct`]: correct, [`${stage}.dontKnow`]: dontKnowCount } },
+    );
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    console.warn("[db] failed to store test answer:", (err as Error).message);
+    res.status(500).json({ error: "answer not stored" });
+  }
 });
 
 // The participant reached a later stage of the flow. Re-sending the current
@@ -142,4 +238,13 @@ function requireDb(res: Response): boolean {
   if (dbReady()) return true;
   res.status(503).json({ error: "MongoDB unavailable — study data is not being stored" });
   return false;
+}
+
+// Client timestamps (Date.now()); rejects garbage like 0 or seconds-based values.
+function isEpochMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 1e12 && value < 1e13;
+}
+
+function text(value: unknown, max: number): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
 }
