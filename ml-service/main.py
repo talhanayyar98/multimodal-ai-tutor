@@ -2,32 +2,41 @@
 
 from __future__ import annotations
 
-import os
+import math
+from dataclasses import asdict
 
-import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from model import FEATURE_DIM, STATES, load_model
+from model import FEATURE_DIM
+from predictor import Predictor, configured_run
 
 app = FastAPI(title="Cognitive State Inference Service")
 
-model = load_model(os.environ.get("MODEL_WEIGHTS"))
+# Fails at startup (rather than serving wrong predictions) if MODEL_RUN is broken.
+predictor = Predictor(configured_run())
 
 
 class InferRequest(BaseModel):
-    # Sequence of per-window feature vectors: (seq_len, FEATURE_DIM).
+    # Sequence of per-window feature vectors, oldest first: (seq_len, FEATURE_DIM).
     features: list[list[float]]
+
+
+class ModelInfoOut(BaseModel):
+    name: str
+    data: str | None
+    trained: bool
 
 
 class InferResponse(BaseModel):
     state: str
     probs: dict[str, float]
+    model: ModelInfoOut
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    return {"status": "ok", "model": asdict(predictor.info)}
 
 
 @app.post("/infer", response_model=InferResponse)
@@ -40,14 +49,8 @@ def infer(req: InferRequest) -> InferResponse:
                 status_code=422,
                 detail=f"features[{i}] has {len(row)} values, expected {FEATURE_DIM}",
             )
+        if not all(math.isfinite(v) for v in row):
+            raise HTTPException(status_code=422, detail=f"features[{i}] contains NaN or infinity")
 
-    x = torch.tensor([req.features], dtype=torch.float32)  # (1, seq_len, FEATURE_DIM)
-    with torch.no_grad():
-        logits = model(x)
-        probs = torch.softmax(logits, dim=-1).squeeze(0)
-
-    top = int(probs.argmax().item())
-    return InferResponse(
-        state=STATES[top],
-        probs={state: round(float(p), 4) for state, p in zip(STATES, probs.tolist())},
-    )
+    state, probs = predictor.predict(req.features)
+    return InferResponse(state=state, probs=probs, model=ModelInfoOut(**asdict(predictor.info)))

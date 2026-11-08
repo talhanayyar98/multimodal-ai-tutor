@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { postSignals } from "@/lib/api";
+import { postSignals, type ModelInfo } from "@/lib/api";
 import { toVector, type Features } from "@/lib/features";
 
 export const BATCH_INTERVAL_MS = 5000;
@@ -18,6 +18,7 @@ export function useSignalBatcher(
 ) {
   const [lastState, setLastState] = useState<string | null>(null);
   const [batchesSent, setBatchesSent] = useState(0);
+  const [model, setModel] = useState<ModelInfo | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -25,7 +26,7 @@ export function useSignalBatcher(
       const windowEnd = Date.now();
       const features = collect(BATCH_INTERVAL_MS / 1000);
       try {
-        const { state } = await postSignals({
+        const { state, model } = await postSignals({
           sessionId,
           windowStart: windowEnd - BATCH_INTERVAL_MS,
           windowEnd,
@@ -34,6 +35,7 @@ export function useSignalBatcher(
           extras: collectExtras?.(),
         });
         setLastState(state);
+        setModel(model ?? null);
         setBatchesSent((n) => n + 1);
       } catch {
         // Backend unreachable — drop this window, the next one will retry.
@@ -42,5 +44,5 @@ export function useSignalBatcher(
     return () => clearInterval(interval);
   }, [sessionId, collect, collectExtras]);
 
-  return { lastState, batchesSent };
+  return { lastState, batchesSent, model };
 }

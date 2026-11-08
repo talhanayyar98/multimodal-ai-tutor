@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import { dbReady } from "./db";
 import { generateChatReply, generateHint, type ChatTurn } from "./gemini";
-import { inferState } from "./ml";
+import { inferState, type ModelInfo } from "./ml";
 import { ChatMessage, Hint, Session, SignalBatch } from "./models";
 import { findSession } from "./sessionLookup";
 import * as store from "./store";
@@ -61,8 +61,11 @@ router.post("/signals", async (req, res) => {
   store.pushVector(sessionId, vector);
 
   let state = "unknown";
+  let model: ModelInfo | null = null; // null = ML service unreachable
   try {
-    state = (await inferState(store.recentVectors(sessionId))).state;
+    const result = await inferState(store.recentVectors(sessionId));
+    state = result.state;
+    model = result.model ?? null;
   } catch (err) {
     console.warn("[signals] ML service unavailable:", (err as Error).message);
   }
@@ -78,7 +81,7 @@ router.post("/signals", async (req, res) => {
       state,
     }).catch(warnDb("signal batch"));
   }
-  res.json({ ok: true, state });
+  res.json({ ok: true, state, model });
 });
 
 router.get("/hint/:sessionId", async (req, res) => {

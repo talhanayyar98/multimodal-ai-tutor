@@ -1,8 +1,18 @@
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://127.0.0.1:8000";
 
+/** Which model produced a prediction (ml-service/predictor.py). */
+export interface ModelInfo {
+  /** The training run's directory name, or "untrained". */
+  name: string;
+  /** What it was trained on: "synthetic" | "real"; null for the untrained placeholder. */
+  data: string | null;
+  trained: boolean;
+}
+
 export interface InferResult {
   state: string;
   probs: Record<string, number>;
+  model?: ModelInfo;
 }
 
 export async function inferState(vectors: number[][]): Promise<InferResult> {

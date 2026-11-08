@@ -37,6 +37,21 @@ export interface SignalBatch {
   extras?: Record<string, number>;
 }
 
+/** Which model produced the state (ml-service/predictor.py); null when the ML service is unreachable. */
+export interface ModelInfo {
+  /** The training run's directory name, or "untrained". */
+  name: string;
+  /** "synthetic" | "real"; null for the untrained placeholder. */
+  data: string | null;
+  trained: boolean;
+}
+
+export interface SignalsResponse {
+  ok: boolean;
+  state: string;
+  model: ModelInfo | null;
+}
+
 export interface HintResponse {
   hint: string;
   state: string;
@@ -68,7 +83,7 @@ export async function postSelfReport(report: SelfReport): Promise<void> {
   );
 }
 
-export async function postSignals(batch: SignalBatch): Promise<{ ok: boolean; state: string }> {
+export async function postSignals(batch: SignalBatch): Promise<SignalsResponse> {
   return parse(
     await fetch(`${BACKEND_URL}/api/signals`, {
       method: "POST",
