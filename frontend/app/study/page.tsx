@@ -1,16 +1,25 @@
 "use client";
 
-// A/B study (between-subjects): consent → camera check → tutoring → done.
+// A/B study (between-subjects):
+//   consent → pre-test → camera check → tutoring → NASA-TLX → SUS → post-test → done.
 //
-// The participant gets a code (LRN001…) when they agree; their group is drawn
-// at that moment (balanced blocks of 4, see backend/src/allocation.ts) and is
-// never shown. The tutoring is the main page's loop (useTutorSession) on a
-// fixed task — the same 12 problems in the same order for everyone, ending
-// after the last one or at the time limit (lib/studyTask.ts) — without
-// anything that reveals the group or the inferred states; the adaptive group
-// still gets the check-in bubbles, since they are the intervention. Each
-// stage and the final status are stored with the participant, so the analysis
-// can keep only status "completed".
+// The participant gets a code (LRN001…) when they agree; their group and test
+// order are drawn at that moment (balanced blocks of 4, see
+// backend/src/allocation.ts) and the group is never shown.
+// - Pre-/post-test (lib/studyTests.ts): two matched forms, A before and B
+//   after or the reverse, balanced within each group. Outside the
+//   intervention: no tutor, no feedback, identical for both groups.
+// - Tutoring: the main page's loop (useTutorSession) on a fixed task — the
+//   same 12 problems in the same order, ending after the last one or at the
+//   time limit (lib/studyTask.ts) — without anything that reveals the group or
+//   the inferred states; the adaptive group still gets the check-in bubbles,
+//   since they are the intervention. The camera check comes right before it,
+//   so the camera keeps running from the check into the tutoring.
+// - NASA-TLX (raw) and SUS about the tutoring (lib/studyQuestionnaires.ts),
+//   right after it: TLX belongs right after the task, and neither rating
+//   should be coloured by how the post-test went.
+// Each stage and the final status are stored with the participant, so the
+// analysis can keep only status "completed".
 //
 // Researcher-only URL options:
 //   ?test             test run: ST-code + isTest: true, with its own counter
@@ -25,6 +34,8 @@ import SetupStep from "@/components/collect/SetupStep";
 import ProblemResults from "@/components/results/ProblemResults";
 import SessionCard from "@/components/SessionCard";
 import StudyConsent from "@/components/study/StudyConsent";
+import StudyQuestionnaire from "@/components/study/StudyQuestionnaire";
+import StudyTest from "@/components/study/StudyTest";
 import TutorWorkspace from "@/components/TutorWorkspace";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
 import { useMouseTracking } from "@/hooks/useMouseTracking";
@@ -35,13 +46,15 @@ import {
   finishStudyParticipant,
   setStudyStage,
   startStudySession,
+  type NewStudyParticipant,
   type SessionInfo,
 } from "@/lib/api";
 import { EyeAccumulator, type EyeSample } from "@/lib/eyeSignals";
 import type { Features } from "@/lib/features";
 import { STUDY_PROBLEMS, STUDY_TIME_LIMIT_MS } from "@/lib/studyTask";
+import { TEST_FORMS } from "@/lib/studyTests";
 
-type Step = "consent" | "camera" | "tutoring" | "done";
+type Step = "consent" | "pretest" | "camera" | "tutoring" | "tlx" | "sus" | "posttest" | "done";
 /** How the tutoring ended: every problem done, time limit reached, or "End session". */
 type TutoringEnd = "all-done" | "time-up" | "ended-early";
 
@@ -54,9 +67,10 @@ const END_TITLE: Record<TutoringEnd, string> = {
   "ended-early": "Ending the session",
 };
 
-const DONE_NOTE: Record<TutoringEnd, string> = {
-  "all-done": `You worked through all ${STUDY_PROBLEMS.length} problems. Thank you for trying the tutor!`,
-  "time-up": "Time was up before the last problem, and that's completely fine. Thank you for trying the tutor!",
+const DONE_NOTE = {
+  "all-done": `You worked through all ${STUDY_PROBLEMS.length} problems and both quizzes. Thank you for trying the tutor!`,
+  "time-up":
+    "You finished both quizzes. Time ran out before the last problem, and that's completely fine. Thank you for trying the tutor!",
   "ended-early": "You ended the session early; everything up to that point is saved. Thank you for taking part!",
 };
 
@@ -65,10 +79,12 @@ export default function StudyPage() {
   const [isTest, setIsTest] = useState(false);
   const [timeLimitMs, setTimeLimitMs] = useState(STUDY_TIME_LIMIT_MS);
   const [participantId, setParticipantId] = useState<string | null>(null);
+  const [testForms, setTestForms] = useState<NewStudyParticipant["testForms"] | null>(null);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [starting, setStarting] = useState(false);
   const [tutoringStartedAt, setTutoringStartedAt] = useState<number | null>(null);
   const [tutoringEnd, setTutoringEnd] = useState<TutoringEnd | null>(null);
+  const [endedEarly, setEndedEarly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,7 +135,7 @@ export default function StudyPage() {
   useSignalBatcher(tutoringActive ? (session?.sessionId ?? null) : null, collect, undefined, tutor.handleState);
 
   // Drop whatever the accumulators gathered before the tutoring (consent,
-  // camera check), so the first stored window covers only its own 5 s.
+  // pre-test, camera check), so the first stored window covers only its own 5 s.
   useEffect(() => {
     if (!tutoringActive) return;
     eyeAcc.current!.flush(5);
@@ -127,16 +143,16 @@ export default function StudyPage() {
   }, [tutoringActive, mouseAcc]);
 
   // A reload would lose the session (the participant would stay "in-progress") — ask first.
-  const recording = step === "camera" || step === "tutoring";
+  const inProgress = step !== "consent" && step !== "done";
   useEffect(() => {
-    if (!recording) return;
+    if (!inProgress) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [recording]);
+  }, [inProgress]);
 
   // ---------- steps ----------
 
@@ -147,17 +163,26 @@ export default function StudyPage() {
       // A retry after a failed start keeps the code that was already created.
       let pid = participantId;
       if (!pid) {
-        pid = (await createStudyParticipant(isTest)).participantId;
+        const created = await createStudyParticipant(isTest);
+        pid = created.participantId;
         setParticipantId(pid);
+        setTestForms(created.testForms);
       }
       setSession(await startStudySession(pid));
-      await setStudyStage(pid, "camera");
-      setStep("camera");
+      await setStudyStage(pid, "pretest");
+      setStep("pretest");
     } catch (err) {
       setError(`Could not start the session (${(err as Error).message}). Please tell the researcher.`);
     } finally {
       setStarting(false);
     }
+  }
+
+  // StudyTest shows its own "Try again" if this throws.
+  async function handlePretestDone() {
+    if (!participantId) return;
+    await setStudyStage(participantId, "camera");
+    setStep("camera");
   }
 
   async function handleCameraDone(reason: "face-ok" | "skipped") {
@@ -172,15 +197,23 @@ export default function StudyPage() {
     }
   }
 
-  async function saveEnd(how: TutoringEnd) {
+  // After the tutoring: on to the questionnaires (the note says how the
+  // tutoring ended), or straight to the end for "End session".
+  async function saveTutoringEnd(how: TutoringEnd) {
     if (!participantId) return;
     setSaving(true);
     setError(null);
     try {
-      await finishStudyParticipant(participantId, how === "ended-early" ? "ended-early" : "completed");
-      setStep("done");
+      if (how === "ended-early") {
+        await finishStudyParticipant(participantId, "ended-early");
+        setEndedEarly(true);
+        setStep("done");
+      } else {
+        await setStudyStage(participantId, "tlx", how);
+        setStep("tlx");
+      }
     } catch (err) {
-      setError(`Could not save the end of your session (${(err as Error).message}). Please tell the researcher.`);
+      setError(`Could not save your progress (${(err as Error).message}). Please tell the researcher.`);
     } finally {
       setSaving(false);
     }
@@ -193,7 +226,7 @@ export default function StudyPage() {
     ended.current = true;
     tutor.endRun(); // logs an open problem as "unfinished" while the session is still attached
     setTutoringEnd(how);
-    void saveEnd(how);
+    void saveTutoringEnd(how);
   }
   // The timer below must call the latest endTutoring (it reads the current check-in).
   const endTutoringRef = useRef(endTutoring);
@@ -207,9 +240,45 @@ export default function StudyPage() {
     return () => clearTimeout(timer);
   }, [tutoringActive, tutoringStartedAt, timeLimitMs]);
 
-  function handleEndEarly() {
+  // The questionnaire shows the error (and keeps the answers) if these throw.
+  async function handleTlxDone() {
+    if (!participantId) return;
+    await setStudyStage(participantId, "sus");
+    setStep("sus");
+  }
+
+  async function handleSusDone() {
+    if (!participantId) return;
+    await setStudyStage(participantId, "posttest");
+    setStep("posttest");
+  }
+
+  // StudyTest shows its own "Try again" if this throws.
+  async function handlePosttestDone() {
+    if (!participantId) return;
+    await finishStudyParticipant(participantId, "completed");
+    setStep("done");
+  }
+
+  // "End session" in a quiz or questionnaire (the tutoring has its own, which also closes the run).
+  async function endOutsideTutoring() {
+    if (!participantId || !window.confirm("End the session now? Everything so far is kept.")) return;
+    setError(null);
+    try {
+      await finishStudyParticipant(participantId, "ended-early");
+      setEndedEarly(true);
+      setStep("done");
+    } catch (err) {
+      setError(`Could not end the session (${(err as Error).message}). Please tell the researcher.`);
+    }
+  }
+
+  function handleEndTutoringEarly() {
     if (window.confirm("End the session now? Everything so far is kept.")) endTutoring("ended-early");
   }
+
+  const withCamera = step === "camera" || step === "tutoring";
+  const doneNote = endedEarly ? DONE_NOTE["ended-early"] : DONE_NOTE[tutoringEnd === "time-up" ? "time-up" : "all-done"];
 
   return (
     <main className="page home study" data-step={step}>
@@ -247,7 +316,17 @@ export default function StudyPage() {
 
       {step === "consent" && <StudyConsent busy={starting} onAgree={handleAgree} />}
 
-      {recording && (
+      {step === "pretest" && participantId && testForms && (
+        <StudyTest
+          test="pre"
+          items={TEST_FORMS[testForms.pre]}
+          participantId={participantId}
+          onDone={handlePretestDone}
+          onEndSession={() => void endOutsideTutoring()}
+        />
+      )}
+
+      {withCamera && (
         <div className="columns">
           {step === "camera" ? (
             <div className="collect-main">
@@ -260,7 +339,11 @@ export default function StudyPage() {
                 <p>{saving || !error ? "Saving your session…" : "Your session could not be saved yet."}</p>
                 {error && !saving && (
                   <div className="collect-actions">
-                    <button className="btn btn-gold" onClick={() => void saveEnd(tutoringEnd)} data-testid="save-retry">
+                    <button
+                      className="btn btn-gold"
+                      onClick={() => void saveTutoringEnd(tutoringEnd)}
+                      data-testid="save-retry"
+                    >
                       Try again
                     </button>
                   </div>
@@ -281,7 +364,7 @@ export default function StudyPage() {
                 <SessionCard stats={tutor.stats} history={tutor.history} />
                 <button
                   className="btn btn-ghost btn-sm end-session"
-                  onClick={handleEndEarly}
+                  onClick={handleEndTutoringEarly}
                   data-testid="end-session"
                 >
                   End session
@@ -305,9 +388,27 @@ export default function StudyPage() {
         />
       )}
 
-      {step === "done" && (
-        <DoneStep participantId={participantId} note={<p>{DONE_NOTE[tutoringEnd ?? "all-done"]}</p>} />
+      {(step === "tlx" || step === "sus") && participantId && (
+        <StudyQuestionnaire
+          key={step}
+          kind={step}
+          participantId={participantId}
+          onDone={step === "tlx" ? handleTlxDone : handleSusDone}
+          onEndSession={() => void endOutsideTutoring()}
+        />
       )}
+
+      {step === "posttest" && participantId && testForms && (
+        <StudyTest
+          test="post"
+          items={TEST_FORMS[testForms.post]}
+          participantId={participantId}
+          onDone={handlePosttestDone}
+          onEndSession={() => void endOutsideTutoring()}
+        />
+      )}
+
+      {step === "done" && <DoneStep participantId={participantId} note={<p>{doneNote}</p>} />}
     </main>
   );
 }

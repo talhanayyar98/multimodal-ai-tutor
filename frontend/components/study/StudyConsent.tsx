@@ -10,6 +10,7 @@ import {
   CrossIcon,
   ExitIcon,
   MouseIcon,
+  PencilIcon,
   PulseIcon,
   ShieldIcon,
   TargetIcon,
@@ -36,19 +37,21 @@ export default function StudyConsent({
       <p className="eyebrow">MSc thesis study · University of Jyväskylä</p>
       <h2 className="hero-title">Learn with an AI tutor</h2>
       <p className="lead">
-        This session is part of an MSc thesis at the University of Jyväskylä. You will solve{" "}
-        {STUDY_PROBLEMS.length} short maths and logic problems (at most {STUDY_TIME_LIMIT_MIN}{" "}
-        minutes) with an AI tutor that you can chat with and ask for hints. The study compares
-        different versions of the tutor; which one you get is decided at random.
+        This session is part of an MSc thesis at the University of Jyväskylä. You will take a short
+        quiz, then solve {STUDY_PROBLEMS.length} short maths and logic problems (at most{" "}
+        {STUDY_TIME_LIMIT_MIN} minutes) with an AI tutor that you can chat with and ask for hints,
+        answer two short questionnaires about the tutor, and take a second short quiz. In total
+        about 40 minutes. The study compares different versions of the tutor; which one you get is
+        decided at random.
       </p>
 
       <div className="facts">
+        <Fact icon={<PencilIcon />} value="2 short quizzes" label="before and after" />
         <Fact
           icon={<TargetIcon />}
           value={`${STUDY_PROBLEMS.length} problems`}
-          label={`up to ${STUDY_TIME_LIMIT_MIN} minutes`}
+          label={`with the AI tutor, up to ${STUDY_TIME_LIMIT_MIN} min`}
         />
-        <Fact icon={<ChatIcon />} value="AI tutor" label="chat and hints any time" />
         <Fact icon={<ShieldIcon />} value="No video" label="leaves this computer" />
       </div>
 
@@ -70,8 +73,8 @@ export default function StudyConsent({
           <p className="info-sub">Also:</p>
           <ul>
             <Row icon={<PulseIcon />}>
-              Your answers, how long each problem took, the hints you asked for and your chat with
-              the tutor.
+              Your quiz and questionnaire answers, your answers to the problems, how long each
+              took, the hints you asked for and your chat with the tutor.
             </Row>
           </ul>
         </div>

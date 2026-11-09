@@ -15,7 +15,7 @@ export interface ChoiceOption<T> {
   label: string;
 }
 
-function Marker({ n, state }: { n?: number; state: QuestionState }) {
+export function Marker({ n, state }: { n?: number; state: QuestionState }) {
   if (n === undefined) return null;
   return (
     <span className="q-mark" data-state={state} aria-hidden="true">
@@ -24,7 +24,7 @@ function Marker({ n, state }: { n?: number; state: QuestionState }) {
   );
 }
 
-function Missing({ state, text }: { state: QuestionState; text: string }) {
+export function Missing({ state, text }: { state: QuestionState; text: string }) {
   if (state !== "missing") return null;
   return <p className="q-missing">{text}</p>;
 }
@@ -116,6 +116,7 @@ export function ScaleField({
   onChange,
   n,
   state = "idle",
+  cumulative = true,
 }: {
   name: string;
   legend: string;
@@ -125,8 +126,12 @@ export function ScaleField({
   onChange: (value: number) => void;
   n?: number;
   state?: QuestionState;
+  /** true: a meter that fills up to the choice (amounts). false: only the chosen box lights up (agree/disagree). */
+  cumulative?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const lit = (k: number, upTo: number | null | undefined) =>
+    upTo !== null && upTo !== undefined && (cumulative ? k <= upTo : k === upTo);
 
   return (
     <fieldset className="field q" data-state={state}>
@@ -140,8 +145,8 @@ export function ScaleField({
             <label
               key={k}
               className="scale-step"
-              data-on={value !== undefined && k <= value}
-              data-preview={hover !== null && k <= hover}
+              data-on={lit(k, value)}
+              data-preview={lit(k, hover)}
               data-checked={value === k}
               onMouseEnter={() => setHover(k)}
             >

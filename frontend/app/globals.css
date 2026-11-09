@@ -3908,3 +3908,135 @@ body:has(.page.home) {
 .study .code-value {
   color: var(--ai-2);
 }
+
+/* Pre-/post-test card (/study). */
+.study .study-test .study-test-rules {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--text-dim);
+}
+
+.study .study-test .problem-foot {
+  margin-top: 0.75rem;
+}
+
+.study .study-test-end {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.4rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* `.collect-card p` would shrink and dim the question; keep it like the tutoring's. */
+.study .study-test .problem-text {
+  margin: 0.5rem 0 1rem;
+  font-size: 1.12rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* Questionnaires (/study): the 1–5 scale and the question cards in the tutor's colours. */
+.study .q[data-state="active"] {
+  border-color: color-mix(in srgb, var(--ai-2) 40%, transparent);
+  background: color-mix(in srgb, var(--ai-2) 4%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ai-2) 6%, transparent);
+}
+
+.study .q-mark[data-state="active"] {
+  border-color: var(--ai-2);
+  color: var(--ai-2);
+}
+
+.study .scale-step[data-preview="true"] {
+  border-color: color-mix(in srgb, var(--ai-2) 35%, transparent);
+  background: color-mix(in srgb, var(--ai-2) 8%, transparent);
+  color: var(--ai-2);
+}
+
+.study .scale-step[data-on="true"] {
+  border-color: color-mix(in srgb, var(--ai-2) 45%, transparent);
+  background: color-mix(in srgb, var(--ai-2) 15%, transparent);
+  color: var(--ai-2);
+}
+
+.study .scale-step[data-checked="true"] {
+  border-color: var(--ai-2);
+  background: linear-gradient(135deg, var(--ai-1), var(--ai-2));
+  color: #ffffff;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--ai-2) 65%, transparent);
+}
+
+/* NASA-TLX scale: 21 points from 0 to 100; the middle one marked, like the paper form. */
+.tlx-question {
+  margin: 0.15rem 0 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.tlx-scale {
+  max-width: 600px;
+}
+
+.tlx-steps {
+  display: grid;
+  grid-template-columns: repeat(21, minmax(0, 1fr));
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.tlx-step {
+  position: relative;
+  border-left: 1px solid var(--border-soft);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tlx-step:first-child {
+  border-left: none;
+}
+
+.tlx-step input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tlx-step[data-mid="true"]::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--text-faint);
+  opacity: 0.45;
+}
+
+.tlx-step:hover {
+  background: color-mix(in srgb, var(--ai-2) 12%, transparent);
+}
+
+.tlx-step[data-on="true"] {
+  background: color-mix(in srgb, var(--ai-2) 16%, transparent);
+}
+
+.tlx-step[data-checked="true"] {
+  background: linear-gradient(180deg, var(--ai-1), var(--ai-2));
+}
+
+.tlx-step:has(input:focus-visible) {
+  outline: 2px solid var(--ai-2);
+  outline-offset: -2px;
+}
+
+/* `.q` has a dark translucent background made for /collect's dark theme. */
+.study .q {
+  background: var(--surface-2);
+}

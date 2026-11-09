@@ -173,8 +173,22 @@ const ExerciseEventSchema = new Schema({
 // The /study flow, in order. A participant only ever moves forward, and can
 // only be marked "completed" after reaching the last stage.
 // Must match StudyStage in frontend/lib/api.ts.
-export const STUDY_STAGES = ["consent", "camera", "tutoring"] as const;
+// The questionnaires come right after the tutoring, so they rate it while it
+// is fresh and before the post-test can colour the ratings.
+export const STUDY_STAGES = ["consent", "pretest", "camera", "tutoring", "tlx", "sus", "posttest"] as const;
 export type StudyStage = (typeof STUDY_STAGES)[number];
+
+// NASA-TLX, raw (unweighted) version: six 0–100 scales in steps of 5.
+// `performance` runs from 0 = perfect to 100 = failure, like the original.
+export const TLX_SCALES = ["mental", "physical", "temporal", "performance", "effort", "frustration"] as const;
+export const SUS_ITEM_COUNT = 10;
+
+// Pre-/post-test forms (frontend/lib/studyTests.ts): "AB" = form A before the
+// tutoring and form B after it, "BA" the reverse. Balanced within each group
+// by the allocation blocks (allocation.ts).
+export const TEST_ORDERS = ["AB", "BA"] as const;
+export type TestOrder = (typeof TEST_ORDERS)[number];
+export const TESTS = ["pre", "post"] as const;
 
 // "in-progress" until finished. Someone who closes the tab stays in-progress
 // forever, so for the analysis: status "completed" (and isTest false).
@@ -192,6 +206,26 @@ const StudyParticipantSchema = new Schema({
   abGroup: { type: String, enum: AB_GROUPS, required: true },
   // The allocation block the group was drawn from (see allocation.ts), for auditing.
   allocationBlock: { type: Number, required: true },
+  testOrder: { type: String, enum: TEST_ORDERS, required: true },
+  // Score summaries, recounted from `testanswers` after every answer (that
+  // collection is the source of truth). `answered` includes "I don't know".
+  pretest: { form: String, answered: Number, correct: Number, dontKnow: Number },
+  posttest: { form: String, answered: Number, correct: Number, dontKnow: Number },
+  // Questionnaires about the tutoring, stored once. Times are client epoch ms.
+  // tlx.raw = mean of the six scales (Raw TLX, 0–100, higher = more workload).
+  tlx: {
+    mental: Number,
+    physical: Number,
+    temporal: Number,
+    performance: Number,
+    effort: Number,
+    frustration: Number,
+    raw: Number,
+    shownAt: Number,
+    answeredAt: Number,
+  },
+  // sus.items = the ten 1–5 answers in item order; sus.score = standard SUS 0–100.
+  sus: { items: { type: [Number], default: undefined }, score: Number, shownAt: Number, answeredAt: Number },
   status: { type: String, enum: STUDY_STATUSES, default: "in-progress" },
   // The furthest stage reached, and when each stage was reached (where people drop out).
   stage: { type: String, enum: STUDY_STAGES, default: "consent" },
@@ -205,11 +239,34 @@ const StudyParticipantSchema = new Schema({
 // The shuffled group order for one block of BLOCK_SIZE consecutive study
 // participants (see allocation.ts). _id "study-<n>", or "study-test-<n>" for
 // test runs. Drawn once, when the block's first participant joins.
+// `testOrders[i]` belongs to the same slot as `groups[i]`.
 const AllocationBlockSchema = new Schema({
   _id: { type: String, required: true },
   groups: { type: [String], required: true },
+  testOrders: { type: [String], required: true },
   createdAt: { type: Date, default: Date.now },
 });
+
+// One answered pre-/post-test question. No feedback is ever shown, and one
+// answer per question: the first one stored counts.
+const TestAnswerSchema = new Schema({
+  participantId: { type: String, required: true, index: true },
+  test: { type: String, enum: TESTS, required: true },
+  form: { type: String, enum: ["A", "B"], required: true },
+  itemId: { type: String, required: true },
+  // The skill, and the tutoring problem (lib/studyTask.ts) this question mirrors.
+  skill: String,
+  mirrors: String,
+  /** 1-based position in the test. */
+  position: Number,
+  answer: String, // exactly as typed; empty for "I don't know"
+  dontKnow: { type: Boolean, required: true },
+  correct: { type: Boolean, required: true },
+  shownAt: { type: Number, required: true }, // client epoch ms
+  answeredAt: { type: Number, required: true },
+  receivedAt: { type: Date, default: Date.now },
+});
+TestAnswerSchema.index({ participantId: 1, test: 1, itemId: 1 }, { unique: true });
 
 // Atomic sequence numbers for participant codes: "participant" and
 // "test-participant" (pilot), "study-participant" and "study-test-participant" (study).
@@ -228,4 +285,5 @@ export const Participant = model("Participant", ParticipantSchema);
 export const ExerciseEvent = model("ExerciseEvent", ExerciseEventSchema);
 export const StudyParticipant = model("StudyParticipant", StudyParticipantSchema);
 export const AllocationBlock = model("AllocationBlock", AllocationBlockSchema);
+export const TestAnswer = model("TestAnswer", TestAnswerSchema);
 export const Counter = model("Counter", CounterSchema);
