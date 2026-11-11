@@ -5,6 +5,7 @@ import AiSparkle from "@/components/AiSparkle";
 import { CameraIcon, MouseIcon, PulseIcon, ShieldIcon } from "@/components/collect/icons";
 import ProblemResults from "@/components/results/ProblemResults";
 import SessionCard from "@/components/SessionCard";
+import TakePart from "@/components/TakePart";
 import TutorWorkspace from "@/components/TutorWorkspace";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
 import { useMouseTracking } from "@/hooks/useMouseTracking";
@@ -158,6 +159,8 @@ export default function Home() {
           </span>
         </div>
       </header>
+
+      <TakePart />
 
       {error && <p className="error">{error}</p>}
 

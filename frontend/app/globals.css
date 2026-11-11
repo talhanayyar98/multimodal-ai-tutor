@@ -2360,6 +2360,133 @@ body:has(.page.home) {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- take part: links to /collect and /study ---------- */
+
+.take-part {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.5rem 0.5rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.take-part-intro h2 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.take-part-intro p {
+  margin: 0.05rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.take-part-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.take-part-link {
+  --accent: var(--ai-1);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 235px;
+  padding: 0.4rem 0.8rem 0.4rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  color: var(--text);
+  text-decoration: none;
+  transition: transform 0.15s var(--ease-out), border-color 0.15s, box-shadow 0.15s;
+}
+
+.take-part-link[data-kind="study"] {
+  --accent: var(--ai-2);
+}
+
+.take-part-link:hover,
+.take-part-link:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.take-part-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.take-part-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: var(--accent);
+}
+
+.take-part-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.take-part-text b {
+  font-size: 0.86rem;
+}
+
+.take-part-text small {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.take-part-arrow {
+  flex: none;
+  color: var(--accent);
+  transition: transform 0.15s var(--ease-out);
+}
+
+.take-part-link:hover .take-part-arrow {
+  transform: translateX(2px);
+}
+
+/* The strip (+ page gap) takes ~85px: keep the workspace within one screen. */
+@media (min-width: 881px) {
+  .take-part ~ .columns .workspace {
+    height: calc(100vh - 235px);
+  }
+}
+
+@media (max-width: 640px) {
+  .take-part {
+    padding: 0.8rem;
+  }
+
+  .take-part-links {
+    width: 100%;
+  }
+
+  .take-part-link {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
 /* ---------- cards + buttons ---------- */
 
 .home .card {
