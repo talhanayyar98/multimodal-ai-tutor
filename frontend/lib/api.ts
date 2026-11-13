@@ -57,6 +57,8 @@ export interface HintResponse {
   hint: string;
   state: string;
   abGroup: "adaptive" | "control";
+  /** Gemini failed: `hint` is the tutor's "busy, try again" notice, not real help. */
+  fallback?: boolean;
 }
 
 async function parse<T>(res: Response): Promise<T> {
@@ -109,6 +111,8 @@ export interface ChatResponse {
   reply: string;
   state: string;
   abGroup: "adaptive" | "control";
+  /** Gemini failed: `reply` is the tutor's "busy, try again" notice. */
+  fallback?: boolean;
 }
 
 export async function sendChat(
@@ -131,6 +135,8 @@ export async function sendChat(
 export interface NudgeResponse {
   reply: string;
   state: string;
+  /** Gemini failed: `reply` is the tutor's "busy, try again" notice. */
+  fallback?: boolean;
 }
 
 /** Help from a state-triggered check-in the learner accepted (adaptive group only). */

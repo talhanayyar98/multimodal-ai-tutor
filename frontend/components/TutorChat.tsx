@@ -27,6 +27,10 @@ interface Message {
   state?: string;
   /** Label above a hint bubble (default "Hint"). */
   tag?: string;
+  /** A "tutor busy / unreachable, try again" note rather than tutoring. */
+  notice?: boolean;
+  /** Left out of the history sent to Gemini: notices, and a message that got no answer. */
+  offRecord?: boolean;
 }
 
 let nextId = 1; // module scope: ids stay unique across chat resets
@@ -126,32 +130,59 @@ export default function TutorChat({
     // Only report changes, not new callback identities.
   }, [busy]);
 
-  function push(role: Role, text: string, state?: string, tag?: string) {
-    setMessages((m) => [...m, { id: nextId++, role, text, state, tag }]);
+  function push(role: Role, text: string, state?: string, tag?: string): number {
+    const id = nextId++;
+    setMessages((m) => [...m, { id, role, text, state, tag }]);
+    return id;
+  }
+
+  /**
+   * The tutor couldn't help this time (Gemini busy, or the server unreachable).
+   * Shown as a plain note, without a state tag, and not reported through
+   * onReply, so it never counts as help the learner received.
+   */
+  function pushNotice(text: string) {
+    setMessages((m) => [...m, { id: nextId++, role: "tutor", text, notice: true, offRecord: true }]);
+  }
+
+  /** The learner's message got no answer: keep it on screen, but don't send it to Gemini twice. */
+  function markUnanswered(id: number, text: string) {
+    setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, offRecord: true } : msg)));
+    setInput((current) => current || text); // back in the box, so trying again is one tap
   }
 
   function recentHistory(): ChatTurn[] {
-    return messages.slice(-8).map((m) => ({
-      role: m.role === "user" ? ("student" as const) : ("tutor" as const),
-      text: m.text,
-    }));
+    return messages
+      .filter((m) => !m.offRecord)
+      .slice(-8)
+      .map((m) => ({
+        role: m.role === "user" ? ("student" as const) : ("tutor" as const),
+        text: m.text,
+      }));
   }
 
   async function handleSend() {
     const text = input.trim();
     if (!text || !sessionId || busy) return;
     setInput("");
-    push("user", text);
+    const history = recentHistory();
+    const sentId = push("user", text);
     setPending("chat");
     const conv = conversation.current;
     try {
-      const res = await sendChat(sessionId, text, recentHistory(), problem);
+      const res = await sendChat(sessionId, text, history, problem);
       if (conv !== conversation.current) return;
+      if (res.fallback) {
+        markUnanswered(sentId, text);
+        pushNotice(res.reply);
+        return;
+      }
       push("tutor", res.reply, res.state);
       onReply?.("chat", res.state);
     } catch {
       if (conv !== conversation.current) return;
-      push("tutor", "I couldn't reach the server just now — give it a second and try again.");
+      markUnanswered(sentId, text);
+      pushNotice("I couldn't reach the server just now. Give it a few seconds, then send your message again.");
     } finally {
       if (conv === conversation.current) setPending(null);
     }
@@ -164,11 +195,15 @@ export default function TutorChat({
     try {
       const res = await fetchHint(sessionId, problem);
       if (conv !== conversation.current) return;
+      if (res.fallback) {
+        pushNotice(res.hint);
+        return;
+      }
       push("hint", res.hint, res.state);
       onReply?.("hint", res.state);
     } catch {
       if (conv !== conversation.current) return;
-      push("tutor", "I couldn't fetch a hint just now — try again in a moment.");
+      pushNotice("I couldn't reach the server just now. Give it a few seconds, then tap Hint again.");
     } finally {
       if (conv === conversation.current) setPending(null);
     }
@@ -192,11 +227,15 @@ export default function TutorChat({
         wrongAnswers: nudgeContext?.wrongAnswers ?? [],
       });
       if (conv !== conversation.current) return;
+      if (res.fallback) {
+        pushNotice(res.reply);
+        return;
+      }
       push("hint", res.reply, offer.state, copy.tag);
       onReply?.("nudge", offer.state);
     } catch {
       if (conv !== conversation.current) return;
-      push("tutor", "I couldn't reach the server just now. Tap Hint in a moment and I'll try again.");
+      pushNotice("I couldn't reach the server just now. Give it a few seconds, then tap Hint and I'll try again.");
     } finally {
       if (conv === conversation.current) setPending(null);
     }
@@ -268,7 +307,8 @@ export default function TutorChat({
                 <AiSparkle size={15} />
               </span>
             )}
-            <div className="msg" data-role={m.role}>
+            <div className="msg" data-role={m.role} data-notice={m.notice || undefined}>
+              {m.notice && <span className="msg-notice-tag">Tutor busy</span>}
               {m.role === "hint" && (
                 <span className="msg-tag">
                   <AiSparkle size={11} /> {m.tag ?? "Hint"}

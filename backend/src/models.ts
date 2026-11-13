@@ -61,6 +61,8 @@ const HintSchema = new Schema({
   // "manual": the Hint button. "nudge": help the learner accepted from a
   // state-triggered check-in (adaptive group only); `state` is the state it was offered for.
   kind: { type: String, enum: ["manual", "nudge"], default: "manual" },
+  // true: Gemini failed and `text` is the "busy" notice (gemini.ts BUSY_TEXT), not real help.
+  fallback: Boolean,
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -106,6 +108,8 @@ const ChatMessageSchema = new Schema({
   role: { type: String, enum: ["student", "tutor"], required: true },
   text: { type: String, required: true },
   state: String,
+  // Tutor rows only: true when Gemini failed and `text` is the "busy" notice, not a real reply.
+  fallback: Boolean,
   createdAt: { type: Date, default: Date.now },
 });
 
