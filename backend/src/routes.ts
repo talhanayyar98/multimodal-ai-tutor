@@ -170,7 +170,7 @@ router.get("/hint/:sessionId", async (req, res) => {
   }
 
   const problem = typeof req.query.problem === "string" ? req.query.problem : undefined;
-  const hint = await generateHint({ state, abGroup: session.abGroup, problem });
+  const { text: hint, fallback } = await generateHint({ state, abGroup: session.abGroup, problem });
 
   if (dbReady()) {
     await Hint.create({
@@ -180,9 +180,10 @@ router.get("/hint/:sessionId", async (req, res) => {
       state,
       abGroup: session.abGroup,
       problem,
+      ...(fallback && { fallback: true }),
     }).catch(warnDb("hint"));
   }
-  res.json({ hint, state, abGroup: session.abGroup });
+  res.json({ hint, state, abGroup: session.abGroup, fallback });
 });
 
 router.post("/chat/:sessionId", async (req, res) => {
@@ -219,7 +220,7 @@ router.post("/chat/:sessionId", async (req, res) => {
         .slice(-10)
     : [];
 
-  const reply = await generateChatReply({
+  const { text: reply, fallback } = await generateChatReply({
     state,
     abGroup: session.abGroup,
     problem: typeof problem === "string" ? problem : undefined,
@@ -231,10 +232,10 @@ router.post("/chat/:sessionId", async (req, res) => {
     const participantId = participantOf(session);
     await ChatMessage.insertMany([
       { sessionId, participantId, role: "student", text: message.trim(), state },
-      { sessionId, participantId, role: "tutor", text: reply, state },
+      { sessionId, participantId, role: "tutor", text: reply, state, ...(fallback && { fallback: true }) },
     ]).catch(warnDb("chat messages"));
   }
-  res.json({ reply, state, abGroup: session.abGroup });
+  res.json({ reply, state, abGroup: session.abGroup, fallback });
 });
 
 // Help from a state-triggered check-in the learner said yes to. The client
@@ -265,7 +266,7 @@ router.post("/nudge/:sessionId", async (req, res) => {
     return;
   }
 
-  const reply = await generateNudge({
+  const { text: reply, fallback } = await generateNudge({
     state: state as NudgeState,
     problem: problem.trim(),
     solution: str(solution, 2000),
@@ -286,9 +287,10 @@ router.post("/nudge/:sessionId", async (req, res) => {
       abGroup: session.abGroup,
       problem: problem.trim(),
       kind: "nudge",
+      ...(fallback && { fallback: true }),
     }).catch(warnDb("nudge"));
   }
-  res.json({ reply, state });
+  res.json({ reply, state, fallback });
 });
 
 // Main-page problem flow. Best effort: without MongoDB the event is dropped (202).

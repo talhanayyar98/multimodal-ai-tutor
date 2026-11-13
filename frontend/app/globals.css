@@ -355,6 +355,20 @@ body {
   color: var(--text-faint);
 }
 
+/* "Tutor busy / unreachable, try again": a note, not tutoring. */
+.msg[data-notice="true"] {
+  border-style: dashed;
+}
+
+.msg-notice-tag {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+
 /* Word-by-word reveal of tutor replies and hints. */
 .msg .word {
   animation: word-in 0.5s ease-out both;
