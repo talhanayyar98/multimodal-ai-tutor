@@ -34,6 +34,7 @@ export default function TutorWorkspace({
           problem={active.problem}
           number={active.number}
           total={tutor.total ?? undefined}
+          progress={tutor.history.map((h) => h.outcome)}
           startedAt={active.startedAt}
           done={finished !== null}
           onAttempt={tutor.handleAttempt}

@@ -178,7 +178,7 @@ export default function SetupStep({
 
       <div className="collect-actions">
         <button
-          className="btn btn-gold btn-lg"
+          className="btn btn-primary btn-lg"
           disabled={!faceOk}
           onClick={() => onDone("face-ok")}
           data-testid="setup-start"

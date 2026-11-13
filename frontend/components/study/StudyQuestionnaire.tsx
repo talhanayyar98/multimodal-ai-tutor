@@ -5,9 +5,9 @@
 // with gaps marks the missing ones and scrolls to the first. Identical for
 // both groups. Wording: lib/studyQuestionnaires.ts; scoring: the backend.
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Marker, Missing, ScaleField, type QuestionState } from "@/components/collect/fields";
-import { ArrowRightIcon } from "@/components/collect/icons";
+import { ArrowRightIcon, ExitIcon } from "@/components/collect/icons";
 import { postQuestionnaire } from "@/lib/api";
 import { SUS_ITEMS, TLX_SCALES, TLX_STEPS, type TlxScale } from "@/lib/studyQuestionnaires";
 
@@ -180,13 +180,21 @@ export default function StudyQuestionnaire({
         </>
       )}
 
+      <div className="answer-meter" data-complete={left === 0} aria-live="polite">
+        <span
+          className="answer-meter-bar"
+          style={{ "--fill": (answered.length - left) / answered.length } as CSSProperties}
+        />
+        {left === 0 ? "All answered" : `${answered.length - left} of ${answered.length} answered`}
+      </div>
+
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
       <div className="collect-actions">
-        <button className="btn btn-gold btn-lg" type="submit" disabled={busy} data-testid={`${kind}-submit`}>
+        <button className="btn btn-primary btn-lg" type="submit" disabled={busy} data-testid={`${kind}-submit`}>
           {busy ? "Saving…" : "Continue"} {!busy && <ArrowRightIcon size={15} />}
         </button>
         {showMissing && left > 0 && (
@@ -197,8 +205,13 @@ export default function StudyQuestionnaire({
       </div>
 
       <div className="study-test-end">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onEndSession} data-testid="end-session">
-          End session
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm end-session"
+          onClick={onEndSession}
+          data-testid="end-session"
+        >
+          <ExitIcon size={13} /> End session
         </button>
       </div>
     </form>

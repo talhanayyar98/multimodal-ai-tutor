@@ -5,14 +5,16 @@
 //
 // The participant gets a code (LRN001…) when they agree; their group and test
 // order are drawn at that moment (balanced blocks of 4, see
-// backend/src/allocation.ts) and the group is never shown.
+// backend/src/allocation.ts). From then on the group is shown in the header
+// as a read-only badge ("Group A · Adaptive tutor" / "Group B · Standard
+// tutor"): it comes from the server and nothing on this page can change it.
 // - Pre-/post-test (lib/studyTests.ts): two matched forms, A before and B
 //   after or the reverse, balanced within each group. Outside the
 //   intervention: no tutor, no feedback, identical for both groups.
 // - Tutoring: the main page's loop (useTutorSession) on a fixed task — the
 //   same 12 problems in the same order, ending after the last one or at the
-//   time limit (lib/studyTask.ts) — without anything that reveals the group or
-//   the inferred states; the adaptive group still gets the check-in bubbles,
+//   time limit (lib/studyTask.ts) — without anything that reveals the
+//   inferred states; the adaptive group still gets the check-in bubbles,
 //   since they are the intervention. The camera check comes right before it,
 //   so the camera keeps running from the check into the tutoring.
 // - NASA-TLX (raw) and SUS about the tutoring (lib/studyQuestionnaires.ts),
@@ -28,13 +30,16 @@
 //                     ending; always a test run, so it can't touch real data.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import AiSparkle from "@/components/AiSparkle";
+import AppHeader from "@/components/AppHeader";
 import DoneStep from "@/components/collect/DoneStep";
+import { ExitIcon, LockIcon, ShieldIcon } from "@/components/collect/icons";
 import SetupStep from "@/components/collect/SetupStep";
+import EndSessionDialog from "@/components/EndSessionDialog";
 import ProblemResults from "@/components/results/ProblemResults";
 import SessionCard from "@/components/SessionCard";
 import StudyConsent from "@/components/study/StudyConsent";
 import StudyQuestionnaire from "@/components/study/StudyQuestionnaire";
+import StudyStepper from "@/components/study/StudyStepper";
 import StudyTest from "@/components/study/StudyTest";
 import TutorWorkspace from "@/components/TutorWorkspace";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
@@ -61,6 +66,12 @@ type TutoringEnd = "all-done" | "time-up" | "ended-early";
 /** Shown small in the check-in bubble (adaptive group). No model details in the study. */
 const NUDGE_NOTE = "Based on your face and mouse signals over the last ~10 s.";
 
+/** How the header names the two groups. */
+const GROUP: Record<SessionInfo["abGroup"], { letter: string; name: string }> = {
+  adaptive: { letter: "A", name: "Adaptive tutor" },
+  control: { letter: "B", name: "Standard tutor" },
+};
+
 const END_TITLE: Record<TutoringEnd, string> = {
   "all-done": "That was the last problem",
   "time-up": "Time's up",
@@ -72,6 +83,14 @@ const DONE_NOTE = {
   "time-up":
     "You finished both quizzes. Time ran out before the last problem, and that's completely fine. Thank you for trying the tutor!",
   "ended-early": "You ended the session early; everything up to that point is saved. Thank you for taking part!",
+};
+
+/** Where the participant is, for the "End session?" dialog (the tutoring adds its problem number). */
+const WHERE: Partial<Record<Step, string>> = {
+  pretest: "You're in the first quiz.",
+  tlx: "You're on the feedback questions.",
+  sus: "You're on the feedback questions.",
+  posttest: "You're in the last quiz, the final step.",
 };
 
 export default function StudyPage() {
@@ -86,6 +105,8 @@ export default function StudyPage() {
   const [tutoringEnd, setTutoringEnd] = useState<TutoringEnd | null>(null);
   const [endedEarly, setEndedEarly] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [endDialog, setEndDialog] = useState(false);
+  const [ending, setEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -224,6 +245,7 @@ export default function StudyPage() {
   function endTutoring(how: TutoringEnd) {
     if (ended.current) return;
     ended.current = true;
+    setEndDialog(false); // e.g. time ran out while "End session?" was open
     tutor.endRun(); // logs an open problem as "unfinished" while the session is still attached
     setTutoringEnd(how);
     void saveTutoringEnd(how);
@@ -260,9 +282,15 @@ export default function StudyPage() {
     setStep("done");
   }
 
-  // "End session" in a quiz or questionnaire (the tutoring has its own, which also closes the run).
-  async function endOutsideTutoring() {
-    if (!participantId || !window.confirm("End the session now? Everything so far is kept.")) return;
+  // "End session" was confirmed in the dialog. The tutoring closes its run
+  // first (and shows its own "saving" card); elsewhere the dialog waits.
+  async function handleEndConfirmed() {
+    if (tutoringActive) {
+      endTutoring("ended-early");
+      return;
+    }
+    if (!participantId || ending) return;
+    setEnding(true);
     setError(null);
     try {
       await finishStudyParticipant(participantId, "ended-early");
@@ -270,43 +298,60 @@ export default function StudyPage() {
       setStep("done");
     } catch (err) {
       setError(`Could not end the session (${(err as Error).message}). Please tell the researcher.`);
+    } finally {
+      setEnding(false);
+      setEndDialog(false);
     }
   }
 
-  function handleEndTutoringEarly() {
-    if (window.confirm("End the session now? Everything so far is kept.")) endTutoring("ended-early");
-  }
+  const askToEnd = useCallback(() => setEndDialog(true), []);
+  const stay = useCallback(() => setEndDialog(false), []);
 
   const withCamera = step === "camera" || step === "tutoring";
   const doneNote = endedEarly ? DONE_NOTE["ended-early"] : DONE_NOTE[tutoringEnd === "time-up" ? "time-up" : "all-done"];
+  const group = session ? GROUP[session.abGroup] : null;
+  const onProblem = tutoringActive && tutor.active && tutor.total ? { number: tutor.active.number, total: tutor.total } : null;
+  const where = onProblem ? `You're on problem ${onProblem.number} of ${onProblem.total}.` : WHERE[step];
 
   return (
-    <main className="page home study" data-step={step}>
-      <header className="header">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <AiSparkle size={22} />
+    <main className="page study" data-step={step} data-layout={withCamera ? "wide" : "narrow"}>
+      <AppHeader subtitle="MSc thesis study · University of Jyväskylä">
+        {isTest && (
+          <span className="badge badge-test" title="Test run: stored with an ST-code and isTest: true">
+            Test run
           </span>
-          <div>
-            <h1>
-              Multimodal Adaptive <span className="ai-text">AI Tutor</span>
-            </h1>
-            <p className="sub">MSc thesis study · University of Jyväskylä</p>
-          </div>
-        </div>
-        <div className="badges">
-          {isTest && (
-            <span className="badge badge-test" title="Test run: stored with an ST-code and isTest: true">
-              Test run
+        )}
+        {participantId && (
+          <span className="badge" title="Your participant code" data-testid="participant-code">
+            Participant <b>{participantId}</b>
+          </span>
+        )}
+        {session && group && (
+          <span
+            className="badge badge-group"
+            data-group={session.abGroup}
+            data-fixed="true"
+            title="Your group was drawn at random when you joined. It stays the same for the whole session and can't be changed."
+            data-testid="group-badge"
+          >
+            <span className="badge-group-letter" aria-hidden="true">
+              {group.letter}
             </span>
-          )}
-          {participantId && (
-            <span className="badge" data-testid="participant-code">
-              Participant {participantId}
-            </span>
-          )}
-        </div>
-      </header>
+            Group {group.letter} · {group.name}
+            <LockIcon size={13} />
+          </span>
+        )}
+      </AppHeader>
+
+      {/* After "End session" there is no finished journey to show. */}
+      {!(step === "done" && endedEarly) && (
+        <StudyStepper
+          step={step}
+          tutoringMinutes={timeLimitMs / 60_000}
+          problem={onProblem}
+          compact={withCamera}
+        />
+      )}
 
       {error && (
         <p className="error" role="alert">
@@ -322,7 +367,7 @@ export default function StudyPage() {
           items={TEST_FORMS[testForms.pre]}
           participantId={participantId}
           onDone={handlePretestDone}
-          onEndSession={() => void endOutsideTutoring()}
+          onEndSession={askToEnd}
         />
       )}
 
@@ -335,12 +380,13 @@ export default function StudyPage() {
           ) : tutoringEnd ? (
             <div className="collect-main">
               <section className="card collect-card" data-testid="tutoring-end">
+                <p className="eyebrow">Tutoring finished</p>
                 <h2>{END_TITLE[tutoringEnd]}</h2>
                 <p>{saving || !error ? "Saving your session…" : "Your session could not be saved yet."}</p>
                 {error && !saving && (
                   <div className="collect-actions">
                     <button
-                      className="btn btn-gold"
+                      className="btn btn-primary"
                       onClick={() => void saveTutoringEnd(tutoringEnd)}
                       data-testid="save-retry"
                     >
@@ -357,17 +403,14 @@ export default function StudyPage() {
           <aside className="sidebar">
             <WebcamFaceMesh onSample={handleEyeSample} />
             <p className="note">
-              The camera image stays on this computer — only numbers computed from it are saved.
+              <ShieldIcon size={14} />
+              <span>The camera image stays on this computer — only numbers computed from it are saved.</span>
             </p>
             {tutoringActive && (
               <>
                 <SessionCard stats={tutor.stats} history={tutor.history} />
-                <button
-                  className="btn btn-ghost btn-sm end-session"
-                  onClick={handleEndTutoringEarly}
-                  data-testid="end-session"
-                >
-                  End session
+                <button className="btn btn-ghost btn-sm end-session" onClick={askToEnd} data-testid="end-session">
+                  <ExitIcon size={13} /> End session
                 </button>
               </>
             )}
@@ -394,7 +437,7 @@ export default function StudyPage() {
           kind={step}
           participantId={participantId}
           onDone={step === "tlx" ? handleTlxDone : handleSusDone}
-          onEndSession={() => void endOutsideTutoring()}
+          onEndSession={askToEnd}
         />
       )}
 
@@ -404,11 +447,19 @@ export default function StudyPage() {
           items={TEST_FORMS[testForms.post]}
           participantId={participantId}
           onDone={handlePosttestDone}
-          onEndSession={() => void endOutsideTutoring()}
+          onEndSession={askToEnd}
         />
       )}
 
       {step === "done" && <DoneStep participantId={participantId} note={<p>{doneNote}</p>} />}
+
+      <EndSessionDialog
+        open={endDialog}
+        busy={ending}
+        detail={where}
+        onStay={stay}
+        onEnd={() => void handleEndConfirmed()}
+      />
     </main>
   );
 }

@@ -23,12 +23,15 @@ export default function ProblemCard({
   onAttempt,
   onSkip,
   total,
+  progress = [],
 }: {
   problem: Problem;
   /** 1-based position in the session. */
   number: number;
-  /** Size of a fixed problem set (study): shows "Problem 3 of 12". */
+  /** Size of a fixed problem set (study): shows "Problem 3 of 12" and a segment per problem. */
   total?: number;
+  /** How the problems so far ended, in order (colours the segments of a fixed set). */
+  progress?: readonly ("solved" | "skipped")[];
   startedAt: number;
   /** Solved or skipped: the card freezes. */
   done: boolean;
@@ -144,6 +147,21 @@ export default function ProblemCard({
           </span>
         </span>
       </div>
+
+      {total && (
+        <div
+          className="progress-segments"
+          role="img"
+          aria-label={`${progress.filter((p) => p === "solved").length} solved, ${
+            progress.filter((p) => p === "skipped").length
+          } skipped, ${total - progress.length} to go`}
+          data-testid="problem-progress"
+        >
+          {Array.from({ length: total }, (_, i) => (
+            <span key={i} data-status={progress[i] ?? (i === number - 1 ? "current" : "upcoming")} />
+          ))}
+        </div>
+      )}
 
       <p id="problem-text" className="problem-text" data-testid="problem-text">
         {problem.text}

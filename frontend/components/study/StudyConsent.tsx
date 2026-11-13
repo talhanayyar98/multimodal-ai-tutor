@@ -117,7 +117,7 @@ export default function StudyConsent({
 
       <div className="collect-actions">
         <button
-          className="btn btn-gold btn-lg"
+          className="btn btn-primary btn-lg"
           disabled={!ready || busy}
           onClick={onAgree}
           data-testid="consent-continue"

@@ -395,7 +395,7 @@ export default function IntakeForm({ onSubmit }: { onSubmit: (intake: Intake) =>
           {answeredHere} of {section.keys.length} answered
         </span>
         <button
-          className="btn btn-gold btn-lg"
+          className="btn btn-primary btn-lg"
           type="submit"
           disabled={busy}
           data-testid={isLast ? "intake-submit" : "intake-next"}

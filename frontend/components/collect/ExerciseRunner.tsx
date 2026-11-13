@@ -13,7 +13,7 @@ import {
   type Exercise,
   type StageId,
 } from "@/lib/exercises";
-import { ArrowRightIcon, CheckIcon } from "./icons";
+import { ArrowRightIcon, CheckIcon, ClockIcon } from "./icons";
 
 type Outcome = "correct" | "incorrect" | "skipped" | "timeout";
 
@@ -203,7 +203,7 @@ export default function ExerciseRunner({
         <p className="lead">{STAGES[stage].intro}</p>
         {stage !== "warmup" && <p className="muted">This part takes {duration}.</p>}
         <div className="collect-actions">
-          <button className="btn btn-gold btn-lg" onClick={startStage} data-testid="stage-start">
+          <button className="btn btn-primary btn-lg" onClick={startStage} data-testid="stage-start">
             {stage === "warmup" ? "Start the warm-up" : "Start"} <ArrowRightIcon size={15} />
           </button>
         </div>
@@ -226,7 +226,7 @@ export default function ExerciseRunner({
 
       {itemLeft !== null && (
         <div className="item-timer" data-low={itemLeft < 20000} data-testid="item-timer">
-          ⏱ {formatMs(itemLeft)} for this question
+          <ClockIcon size={13} /> {formatMs(itemLeft)} for this question
         </div>
       )}
 
@@ -255,7 +255,7 @@ export default function ExerciseRunner({
           <div className="answer-row">
             <input
               ref={inputRef}
-              className="text-input"
+              className="answer-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -267,12 +267,12 @@ export default function ExerciseRunner({
               data-testid="answer-input"
             />
             <button
-              className="btn btn-gold"
+              className="btn btn-check"
               onClick={submitNumber}
               disabled={outcome !== null || !input.trim()}
               data-testid="answer-check"
             >
-              Check
+              <CheckIcon size={15} /> Check
             </button>
           </div>
           <p className="field-hint">Fraction (3/8), decimal (0.375) or percent (37.5%).</p>
@@ -289,8 +289,8 @@ export default function ExerciseRunner({
         <div className="result" data-outcome={outcome} data-testid="result">
           <b>{OUTCOME_TEXT[outcome]}</b>
           <p>{item.solution}</p>
-          <button className="btn btn-neon" onClick={showNext} data-testid="next">
-            Next question →
+          <button className="btn btn-primary" onClick={showNext} data-testid="next">
+            Next question <ArrowRightIcon size={15} />
           </button>
         </div>
       ) : (

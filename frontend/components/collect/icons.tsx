@@ -1,4 +1,4 @@
-// Small stroke icons for the /collect flow (24×24 grid, inherit currentColor).
+// Small stroke icons shared by all pages (24×24 grid, inherit currentColor).
 
 import type { ReactNode } from "react";
 
@@ -138,5 +138,24 @@ export const ExitIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M14 4.5H6.5A1.5 1.5 0 0 0 5 6v12a1.5 1.5 0 0 0 1.5 1.5H14" />
     <path d="M10 12h10M16.5 8.5L20 12l-3.5 3.5" />
+  </Svg>
+);
+
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+  </Svg>
+);
+
+export const StarIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" />
+  </Svg>
+);
+
+export const FlameIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3c.6 3.2 5.5 5 5.5 10.5a5.5 5.5 0 0 1-11 0c0-1.9.9-3.4 2.2-4.5.1 1.5.8 2.5 1.8 3C10.2 9 10.4 5.5 12 3z" />
   </Svg>
 );

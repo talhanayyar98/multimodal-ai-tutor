@@ -91,7 +91,7 @@ export default function PostSurvey({
 
       {error && <p className="error">{error}</p>}
       <div className="collect-actions">
-        <button className="btn btn-gold btn-lg" type="submit" disabled={busy} data-testid="post-submit">
+        <button className="btn btn-primary btn-lg" type="submit" disabled={busy} data-testid="post-submit">
           {busy ? "Saving…" : "Finish"} {!busy && <ArrowRightIcon size={15} />}
         </button>
       </div>

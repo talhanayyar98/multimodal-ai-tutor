@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AiSparkle from "@/components/AiSparkle";
+import AppHeader from "@/components/AppHeader";
 import { CameraIcon, MouseIcon, PulseIcon, ShieldIcon } from "@/components/collect/icons";
 import ProblemResults from "@/components/results/ProblemResults";
 import SessionCard from "@/components/SessionCard";
@@ -119,46 +120,33 @@ export default function Home() {
 
   return (
     <main className="page home">
-      <header className="header">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <AiSparkle size={22} />
-          </span>
-          <div>
-            <h1>
-              Multimodal Adaptive <span className="ai-text">AI Tutor</span>
-            </h1>
-            <p className="sub">MSc thesis prototype · University of Jyväskylä</p>
-          </div>
-        </div>
-        <div className="badges">
+      <AppHeader subtitle="MSc thesis prototype · University of Jyväskylä">
+        <span
+          className="badge badge-state"
+          data-state={lastState ?? "unknown"}
+          title={`Cognitive state inferred by the LSTM from the last minute of webcam + mouse signals, updated every 5 s. ${modelNote.long}`}
+        >
+          <i className="dot" /> {stateLabel(lastState)}
+          {modelNote.tag && <span className="badge-tag">{modelNote.tag}</span>}
+        </span>
+        {session && (
           <span
-            className="badge badge-state"
-            data-state={lastState ?? "unknown"}
-            title={`Cognitive state inferred by the LSTM from the last minute of webcam + mouse signals, updated every 5 s. ${modelNote.long}`}
+            className="badge badge-group"
+            data-group={session.abGroup}
+            title={
+              session.abGroup === "adaptive"
+                ? "A/B condition: tutor responses are tuned to your inferred cognitive state"
+                : "A/B condition: tutor responses ignore cognitive state (control)"
+            }
           >
-            <i className="dot" /> {stateLabel(lastState)}
-            {modelNote.tag && <span className="badge-tag">{modelNote.tag}</span>}
+            {session.abGroup === "adaptive" && <AiSparkle size={12} />}
+            {session.abGroup === "adaptive" ? "Adaptive tutoring" : "Standard tutoring"}
           </span>
-          {session && (
-            <span
-              className="badge badge-group"
-              data-group={session.abGroup}
-              title={
-                session.abGroup === "adaptive"
-                  ? "A/B condition: tutor responses are tuned to your inferred cognitive state"
-                  : "A/B condition: tutor responses ignore cognitive state (control)"
-              }
-            >
-              {session.abGroup === "adaptive" && <AiSparkle size={12} />}
-              {session.abGroup === "adaptive" ? "Adaptive tutoring" : "Standard tutoring"}
-            </span>
-          )}
-          <span className="badge" title="5-second multimodal signal windows sent to the backend">
-            <b className="badge-count">{batchesSent}</b> windows sent
-          </span>
-        </div>
-      </header>
+        )}
+        <span className="badge" title="5-second multimodal signal windows sent to the backend">
+          <b>{batchesSent}</b> windows sent
+        </span>
+      </AppHeader>
 
       <TakePart />
 

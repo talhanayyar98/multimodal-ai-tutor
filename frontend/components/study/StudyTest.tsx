@@ -6,7 +6,14 @@
 // and counts as not correct. Identical for both groups.
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightIcon } from "@/components/collect/icons";
+import {
+  ArrowRightIcon,
+  ChatIcon,
+  ClockIcon,
+  ExitIcon,
+  PencilIcon,
+  TargetIcon,
+} from "@/components/collect/icons";
 import { postTestAnswer } from "@/lib/api";
 import { scoreTestAnswer, type TestItem } from "@/lib/studyTests";
 
@@ -100,6 +107,9 @@ export default function StudyTest({
     <section className="card collect-card study-test" data-testid={`${test}test`} data-phase={phase}>
       {phase === "intro" && (
         <>
+          <span className="card-icon" data-tone="task" aria-hidden="true">
+            <PencilIcon size={22} />
+          </span>
           <p className="eyebrow">{pre ? "Before the tutoring" : "After the tutoring"}</p>
           <h2>{pre ? "A short quiz" : "One more short quiz"}</h2>
           <p className="lead">
@@ -108,12 +118,23 @@ export default function StudyTest({
               : `${items.length} questions like the ones in the first quiz, with different numbers. Please answer on your own.`}
           </p>
           <ul className="study-test-rules">
-            <li>No tutor and no hints, and you won&apos;t see whether you were right.</li>
-            <li>Not sure? Press &ldquo;I don&apos;t know&rdquo;. That is completely fine.</li>
-            <li>There is no time limit. Pen and paper are fine; please don&apos;t use a calculator.</li>
+            <li>
+              <TargetIcon size={16} />
+              <span>No tutor and no hints, and you won&apos;t see whether you were right.</span>
+            </li>
+            <li>
+              <ChatIcon size={16} />
+              <span>Not sure? Press &ldquo;I don&apos;t know&rdquo;. That is completely fine.</span>
+            </li>
+            <li>
+              <ClockIcon size={16} />
+              <span>
+                There is no time limit. Pen and paper are fine; please don&apos;t use a calculator.
+              </span>
+            </li>
           </ul>
           <div className="collect-actions">
-            <button className="btn btn-gold btn-lg" onClick={() => setPhase("question")} data-testid="test-start">
+            <button className="btn btn-primary btn-lg" onClick={() => setPhase("question")} data-testid="test-start">
               Start the quiz <ArrowRightIcon size={15} />
             </button>
           </div>
@@ -122,9 +143,18 @@ export default function StudyTest({
 
       {phase === "question" && item && (
         <>
-          <p className="eyebrow" data-testid="test-progress">
-            Question {index + 1} of {items.length}
-          </p>
+          <div className="quiz-head">
+            <p className="eyebrow" data-testid="test-progress">
+              Question {index + 1} of {items.length}
+            </p>
+            <span>{pre ? "Quiz 1" : "Quiz 2"}</span>
+          </div>
+          {/* Answered questions all look the same: the quiz gives no feedback on correctness. */}
+          <div className="progress-segments" aria-hidden="true">
+            {items.map((it, i) => (
+              <span key={it.id} data-status={i < index ? "done" : i === index ? "current" : "upcoming"} />
+            ))}
+          </div>
           <p className="problem-text" data-testid="test-question">
             {item.text}
           </p>
@@ -182,7 +212,7 @@ export default function StudyTest({
           <p>{error ? "Your progress could not be saved yet." : "Saving…"}</p>
           {error && (
             <div className="collect-actions">
-              <button className="btn btn-gold" onClick={() => void finish()} data-testid="test-retry">
+              <button className="btn btn-primary" onClick={() => void finish()} data-testid="test-retry">
                 Try again
               </button>
             </div>
@@ -198,8 +228,8 @@ export default function StudyTest({
 
       {phase !== "finishing" && (
         <div className="study-test-end">
-          <button className="btn btn-ghost btn-sm" onClick={onEndSession} data-testid="end-session">
-            End session
+          <button className="btn btn-ghost btn-sm end-session" onClick={onEndSession} data-testid="end-session">
+            <ExitIcon size={13} /> End session
           </button>
         </div>
       )}

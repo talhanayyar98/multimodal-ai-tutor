@@ -12,13 +12,16 @@
 //   ?block=<seconds>    length of each block (default 420)
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import AppHeader from "@/components/AppHeader";
 import ConsentStep from "@/components/collect/ConsentStep";
 import DoneStep from "@/components/collect/DoneStep";
 import ExerciseRunner from "@/components/collect/ExerciseRunner";
+import { ExitIcon, ShieldIcon } from "@/components/collect/icons";
 import IntakeForm from "@/components/collect/IntakeForm";
 import PostSurvey from "@/components/collect/PostSurvey";
 import SetupStep from "@/components/collect/SetupStep";
 import Stepper from "@/components/collect/Stepper";
+import EndSessionDialog from "@/components/EndSessionDialog";
 import SelfReportProbe, { DEFAULT_PROBE_INTERVAL_S } from "@/components/SelfReportProbe";
 import TutorChat from "@/components/TutorChat";
 import WebcamFaceMesh from "@/components/WebcamFaceMesh";
@@ -85,6 +88,7 @@ export default function CollectPage() {
   const [checkins, setCheckins] = useState(0);
   const [dataError, setDataError] = useState<string | null>(null);
   const [endedEarly, setEndedEarly] = useState(false);
+  const [endDialog, setEndDialog] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const contextRef = useRef<{ blockId?: string; exerciseId?: string }>({});
 
@@ -225,10 +229,10 @@ export default function CollectPage() {
     [logEvent],
   );
 
-  function handleEndEarly() {
-    if (window.confirm("End the session now? Everything recorded so far is kept.")) {
-      finishTask("ended-early");
-    }
+  // "End session" was confirmed in the dialog.
+  function handleEndConfirmed() {
+    setEndDialog(false);
+    finishTask("ended-early");
   }
 
   async function handlePost(answers: PostSurveyAnswers) {
@@ -242,29 +246,23 @@ export default function CollectPage() {
 
   return (
     <main className="page collect" data-layout={recording ? "wide" : "narrow"}>
-      <header className="header">
-        <div className="brand">
-          <h1>Multimodal Adaptive AI Tutor</h1>
-          <p className="sub">Data collection · MSc thesis study · University of Jyväskylä</p>
-        </div>
-        <div className="badges">
-          {settings?.isTest && (
-            <span className="badge badge-test" title="Test run: stored with a T-code and isTest: true">
-              Test run
-            </span>
-          )}
-          {participantId && (
-            <span className="badge" data-testid="participant-code">
-              Participant {participantId}
-            </span>
-          )}
-          {step === "task" && (
-            <span className="badge" data-testid="checkin-count">
-              {checkins} check-in{checkins === 1 ? "" : "s"}
-            </span>
-          )}
-        </div>
-      </header>
+      <AppHeader subtitle="Data collection · MSc thesis study · University of Jyväskylä">
+        {settings?.isTest && (
+          <span className="badge badge-test" title="Test run: stored with a T-code and isTest: true">
+            Test run
+          </span>
+        )}
+        {participantId && (
+          <span className="badge" title="Your participant code" data-testid="participant-code">
+            Participant <b>{participantId}</b>
+          </span>
+        )}
+        {step === "task" && (
+          <span className="badge" data-testid="checkin-count">
+            <b>{checkins}</b> check-in{checkins === 1 ? "" : "s"}
+          </span>
+        )}
+      </AppHeader>
 
       <Stepper
         step={step}
@@ -313,15 +311,16 @@ export default function CollectPage() {
           <aside className="sidebar">
             <WebcamFaceMesh onSample={handleEyeSample} />
             <p className="note">
-              The camera image stays on this computer — only numbers computed from it are saved.
+              <ShieldIcon size={14} />
+              <span>The camera image stays on this computer — only numbers computed from it are saved.</span>
             </p>
             {step === "task" && (
               <button
                 className="btn btn-ghost btn-sm end-session"
-                onClick={handleEndEarly}
+                onClick={() => setEndDialog(true)}
                 data-testid="end-session"
               >
-                End session
+                <ExitIcon size={13} /> End session
               </button>
             )}
           </aside>
@@ -341,6 +340,13 @@ export default function CollectPage() {
       {step === "post" && <PostSurvey endedEarly={endedEarly} onSubmit={handlePost} />}
 
       {step === "done" && <DoneStep participantId={participantId} />}
+
+      <EndSessionDialog
+        open={endDialog && step === "task"}
+        detail="Three short wrap-up questions come next, then you're done."
+        onStay={() => setEndDialog(false)}
+        onEnd={handleEndConfirmed}
+      />
     </main>
   );
 }

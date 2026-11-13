@@ -264,9 +264,12 @@ export default function TutorChat({
       <div className="chat-head">
         <h2>
           <span className="chat-head-mark" aria-hidden="true">
-            <AiSparkle size={14} />
+            <AiSparkle size={17} />
           </span>
-          Tutor chat
+          <span className="chat-head-text">
+            Your AI tutor
+            <small>Ask a question, or tap Hint</small>
+          </span>
         </h2>
         <div className="chat-actions">
           <button
@@ -373,7 +376,7 @@ export default function TutorChat({
               <AiSparkle size={14} /> Hint
             </button>
             <button
-              className="btn btn-gold btn-send"
+              className="btn btn-primary btn-send"
               data-testid="chat-send"
               onClick={handleSend}
               disabled={!ready || busy || !input.trim()}

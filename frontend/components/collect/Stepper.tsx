@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon } from "./icons";
+import StepTrack, { type StepStatus, type TrackStep } from "@/components/StepTrack";
 
 export type PhaseId = "consent" | "intake" | "setup" | "task" | "post";
 
@@ -22,9 +22,9 @@ const FIXED_MIN: Record<Exclude<PhaseId, "task">, number> = {
 const WARMUP_MIN = 2;
 
 /**
- * Session-wide progress: five phases, with the warm-up + parts shown as small
- * segments under "Questions". It only changes at phase/part boundaries, so it
- * doesn't add a ticking clock to the exercises.
+ * Progress through the pilot session: five phases, with the warm-up + parts
+ * shown as small segments under "Questions". It only changes at phase/part
+ * boundaries, so it doesn't add a ticking clock to the exercises.
  */
 export default function Stepper({
   step,
@@ -59,10 +59,10 @@ export default function Stepper({
   });
 
   const summary = done
-    ? "All done — thank you!"
-    : `Step ${current + 1} of ${PHASES.length} · ${
-        remaining < 1 ? "less than a minute left" : `about ${Math.round(remaining)} min left`
-      }`;
+    ? "All done. Thank you!"
+    : remaining < 1
+      ? "less than a minute left"
+      : `about ${Math.round(remaining)} min left`;
 
   function meta(i: number, id: PhaseId): string {
     if (i < current) return "Done";
@@ -73,46 +73,22 @@ export default function Stepper({
     return `~${phaseMin(id)} min`;
   }
 
-  return (
-    <nav className="card stepper" aria-label="Session progress" data-testid="stepper">
-      <div className="stepper-top">
-        <span className="stepper-title">Your session</span>
-        <span className="stepper-summary" aria-live="polite">
-          {summary}
-        </span>
-      </div>
-      <ol className="stepper-track">
-        {PHASES.map((p, i) => {
-          const status = i < current ? "done" : i === current ? "current" : "upcoming";
-          return (
-            <li
-              key={p.id}
-              className="stepper-step"
-              data-status={status}
-              aria-current={status === "current" ? "step" : undefined}
-            >
-              <span className="stepper-dot">
-                {status === "done" ? <CheckIcon size={15} /> : i + 1}
-              </span>
-              <span className="stepper-label">{p.label}</span>
-              <span className="stepper-meta">{meta(i, p.id)}</span>
-              {p.id === "task" && (
-                <span className="stepper-segments" aria-hidden="true">
-                  {Array.from({ length: stageCount }, (_, j) => {
-                    const seg =
-                      current > taskIndex || (current === taskIndex && j < stageIndex)
-                        ? "done"
-                        : current === taskIndex && j === stageIndex
-                          ? "current"
-                          : "upcoming";
-                    return <span key={j} data-status={seg} data-warmup={j === 0} />;
-                  })}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
-  );
+  const stageStatus = (j: number): StepStatus =>
+    current > taskIndex || (current === taskIndex && j < stageIndex)
+      ? "done"
+      : current === taskIndex && j === stageIndex
+        ? "current"
+        : "upcoming";
+
+  const steps: TrackStep[] = PHASES.map((p, i) => ({
+    id: p.id,
+    label: p.label,
+    meta: meta(i, p.id),
+    segments:
+      p.id === "task"
+        ? Array.from({ length: stageCount }, (_, j) => ({ status: stageStatus(j), short: j === 0 }))
+        : undefined,
+  }));
+
+  return <StepTrack steps={steps} current={current} summary={summary} />;
 }
